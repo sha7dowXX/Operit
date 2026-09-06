@@ -1,5 +1,6 @@
 package com.ai.assistance.operit.ui.features.chat.screens
 
+import android.content.ClipboardManager
 import android.os.Build
 import android.provider.Settings
 import androidx.annotation.RequiresApi
@@ -103,6 +104,8 @@ import androidx.compose.ui.unit.dp
 import com.ai.assistance.operit.data.preferences.ActivePromptManager
 import com.ai.assistance.operit.data.model.ActivePrompt
 import com.ai.assistance.operit.ui.features.chat.viewmodel.ChatHistoryDisplayMode
+import com.ai.assistance.operit.ui.features.chat.viewmodel.PendingMessageQueueState
+import com.ai.assistance.operit.ui.theme.LocalThemePreferenceSnapshot
 import com.ai.assistance.operit.ui.theme.getTextColorForBackground
 import com.ai.assistance.operit.plugins.chatview.ChatViewEvent
 import com.ai.assistance.operit.plugins.chatview.ChatViewHookParams
@@ -118,12 +121,13 @@ fun AIChatScreen(
         padding: PaddingValues = PaddingValues(),
         viewModel: ChatViewModel? = null,
         isFloatingMode: Boolean = false,
+        embedded: Boolean = false,
         onLoading: (Boolean) -> Unit = {},
         onError: (String) -> Unit = {},
         hasBackgroundImage: Boolean = false,
         onNavigateToTokenConfig: () -> Unit = {},
         onNavigateToSettings: () -> Unit = {},
-        onNavigateToUserPreferences: () -> Unit = {},
+        onNavigateToMemoryBase: () -> Unit = {},
         onNavigateToModelConfig: () -> Unit = {},
         onNavigateToOnboardingModelConfig: () -> Unit = {},
         onNavigateToModelPrompts: () -> Unit = {},
@@ -168,127 +172,79 @@ val actualViewModel: ChatViewModel = viewModel ?: viewModel { ChatViewModel(cont
     // Get background image state
     val preferencesManager = remember { UserPreferencesManager.getInstance(context) }
     val displayPreferencesManager = remember { DisplayPreferencesManager.getInstance(context) }
-    val useBackgroundImage by preferencesManager.useBackgroundImage.collectAsState(initial = false)
-    val backgroundImageUri by preferencesManager.backgroundImageUri.collectAsState(initial = null)
-    val chatHeaderTransparent by preferencesManager.chatHeaderTransparent.collectAsState(initial = false)
-    val chatInputTransparent by preferencesManager.chatInputTransparent.collectAsState(initial = false)
-    val chatInputFloating by preferencesManager.chatInputFloating.collectAsState(initial = false)
-    val chatInputLiquidGlassRaw by
-        preferencesManager.chatInputLiquidGlass.collectAsState(initial = false)
-    val chatInputWaterGlass by
-        preferencesManager.chatInputWaterGlass.collectAsState(initial = false)
+    val themeSnapshot = LocalThemePreferenceSnapshot.current
+    val useBackgroundImage = themeSnapshot.useBackgroundImage
+    val backgroundImageUri = themeSnapshot.backgroundImageUri
+    val chatHeaderTransparent = themeSnapshot.chatHeaderTransparent
+    val chatInputTransparent = themeSnapshot.chatInputTransparent
+    val chatInputFloating = themeSnapshot.chatInputFloating
+    val chatInputLiquidGlassRaw = themeSnapshot.chatInputLiquidGlass
+    val chatInputWaterGlass = themeSnapshot.chatInputWaterGlass
     val chatInputLiquidGlass = chatInputLiquidGlassRaw && !chatInputWaterGlass
-    val chatHeaderHistoryIconColor by preferencesManager.chatHeaderHistoryIconColor.collectAsState(
-            initial = null
-    )
-    val chatHeaderPipIconColor by preferencesManager.chatHeaderPipIconColor.collectAsState(initial = null)
-    val chatHeaderOverlayMode by preferencesManager.chatHeaderOverlayMode.collectAsState(initial = false)
-    val showInputProcessingStatus by preferencesManager.showInputProcessingStatus.collectAsState(initial = true)
+    val chatHeaderHistoryIconColor = themeSnapshot.chatHeaderHistoryIconColor
+    val chatHeaderPipIconColor = themeSnapshot.chatHeaderPipIconColor
+    val chatHeaderOverlayMode = themeSnapshot.chatHeaderOverlayMode
+    val showInputProcessingStatus = themeSnapshot.showInputProcessingStatus
     val enableEnterToSend by displayPreferencesManager.enableEnterToSend.collectAsState(initial = false)
-    val showChatFloatingDotsAnimation by
-        preferencesManager.showChatFloatingDotsAnimation.collectAsState(initial = true)
+    val showChatFloatingDotsAnimation = themeSnapshot.showChatFloatingDotsAnimation
     val hasBackgroundImageFromPrefs = useBackgroundImage && backgroundImageUri != null
     val effectiveHasBackgroundImage = hasBackgroundImage || hasBackgroundImageFromPrefs
 
     // Collect chat style from preferences
-    val chatStyleSetting by preferencesManager.chatStyle.collectAsState(initial = UserPreferencesManager.CHAT_STYLE_CURSOR)
+    val chatStyleSetting = themeSnapshot.chatStyle
     val chatStyle = remember(chatStyleSetting) {
         when (chatStyleSetting) {
             UserPreferencesManager.CHAT_STYLE_BUBBLE -> ChatStyle.BUBBLE
             else -> ChatStyle.CURSOR
         }
     }
-    val inputStyle by
-        preferencesManager.inputStyle.collectAsState(
-            initial = UserPreferencesManager.INPUT_STYLE_AGENT,
-        )
-    val cursorUserBubbleFollowTheme by
-        preferencesManager.cursorUserBubbleFollowTheme.collectAsState(initial = true)
-    val cursorUserBubbleLiquidGlassRaw by
-        preferencesManager.cursorUserBubbleLiquidGlass.collectAsState(initial = false)
-    val cursorUserBubbleWaterGlass by
-        preferencesManager.cursorUserBubbleWaterGlass.collectAsState(initial = false)
+    val inputStyle = themeSnapshot.inputStyle
+    val cursorUserBubbleFollowTheme = themeSnapshot.cursorUserBubbleFollowTheme
+    val cursorUserBubbleLiquidGlassRaw = themeSnapshot.cursorUserBubbleLiquidGlass
+    val cursorUserBubbleWaterGlass = themeSnapshot.cursorUserBubbleWaterGlass
     val cursorUserBubbleLiquidGlass = cursorUserBubbleLiquidGlassRaw && !cursorUserBubbleWaterGlass
-    val bubbleUserBubbleLiquidGlassRaw by
-        preferencesManager.bubbleUserBubbleLiquidGlass.collectAsState(initial = false)
-    val bubbleUserBubbleWaterGlass by
-        preferencesManager.bubbleUserBubbleWaterGlass.collectAsState(initial = false)
+    val bubbleUserBubbleLiquidGlassRaw = themeSnapshot.bubbleUserBubbleLiquidGlass
+    val bubbleUserBubbleWaterGlass = themeSnapshot.bubbleUserBubbleWaterGlass
     val bubbleUserBubbleLiquidGlass =
         bubbleUserBubbleLiquidGlassRaw && !bubbleUserBubbleWaterGlass
-    val bubbleAiBubbleLiquidGlassRaw by
-        preferencesManager.bubbleAiBubbleLiquidGlass.collectAsState(initial = false)
-    val bubbleAiBubbleWaterGlass by
-        preferencesManager.bubbleAiBubbleWaterGlass.collectAsState(initial = false)
+    val bubbleAiBubbleLiquidGlassRaw = themeSnapshot.bubbleAiBubbleLiquidGlass
+    val bubbleAiBubbleWaterGlass = themeSnapshot.bubbleAiBubbleWaterGlass
     val bubbleAiBubbleLiquidGlass =
         bubbleAiBubbleLiquidGlassRaw && !bubbleAiBubbleWaterGlass
-    val cursorUserBubbleColorValue by
-        preferencesManager.cursorUserBubbleColor.collectAsState(initial = null)
-    val bubbleUserBubbleColorValue by
-        preferencesManager.bubbleUserBubbleColor.collectAsState(initial = null)
-    val bubbleAiBubbleColorValue by
-        preferencesManager.bubbleAiBubbleColor.collectAsState(initial = null)
-    val bubbleUserTextColorValue by
-        preferencesManager.bubbleUserTextColor.collectAsState(initial = null)
-    val bubbleAiTextColorValue by
-        preferencesManager.bubbleAiTextColor.collectAsState(initial = null)
-    val bubbleUserUseImage by
-        preferencesManager.bubbleUserUseImage.collectAsState(initial = false)
-    val bubbleAiUseImage by
-        preferencesManager.bubbleAiUseImage.collectAsState(initial = false)
-    val bubbleUserImageUri by preferencesManager.bubbleUserImageUri.collectAsState(initial = null)
-    val bubbleAiImageUri by preferencesManager.bubbleAiImageUri.collectAsState(initial = null)
-    val bubbleUserImageCropLeft by
-        preferencesManager.bubbleUserImageCropLeft.collectAsState(initial = 0f)
-    val bubbleUserImageCropTop by
-        preferencesManager.bubbleUserImageCropTop.collectAsState(initial = 0f)
-    val bubbleUserImageCropRight by
-        preferencesManager.bubbleUserImageCropRight.collectAsState(initial = 0f)
-    val bubbleUserImageCropBottom by
-        preferencesManager.bubbleUserImageCropBottom.collectAsState(initial = 0f)
-    val bubbleUserImageRepeatStart by
-        preferencesManager.bubbleUserImageRepeatStart.collectAsState(initial = 0.35f)
-    val bubbleUserImageRepeatEnd by
-        preferencesManager.bubbleUserImageRepeatEnd.collectAsState(initial = 0.65f)
-    val bubbleUserImageRepeatYStart by
-        preferencesManager.bubbleUserImageRepeatYStart.collectAsState(initial = 0.35f)
-    val bubbleUserImageRepeatYEnd by
-        preferencesManager.bubbleUserImageRepeatYEnd.collectAsState(initial = 0.65f)
-    val bubbleUserImageScale by
-        preferencesManager.bubbleUserImageScale.collectAsState(initial = 1f)
-    val bubbleAiImageCropLeft by
-        preferencesManager.bubbleAiImageCropLeft.collectAsState(initial = 0f)
-    val bubbleAiImageCropTop by
-        preferencesManager.bubbleAiImageCropTop.collectAsState(initial = 0f)
-    val bubbleAiImageCropRight by
-        preferencesManager.bubbleAiImageCropRight.collectAsState(initial = 0f)
-    val bubbleAiImageCropBottom by
-        preferencesManager.bubbleAiImageCropBottom.collectAsState(initial = 0f)
-    val bubbleAiImageRepeatStart by
-        preferencesManager.bubbleAiImageRepeatStart.collectAsState(initial = 0.35f)
-    val bubbleAiImageRepeatEnd by
-        preferencesManager.bubbleAiImageRepeatEnd.collectAsState(initial = 0.65f)
-    val bubbleAiImageRepeatYStart by
-        preferencesManager.bubbleAiImageRepeatYStart.collectAsState(initial = 0.35f)
-    val bubbleAiImageRepeatYEnd by
-        preferencesManager.bubbleAiImageRepeatYEnd.collectAsState(initial = 0.65f)
-    val bubbleAiImageScale by
-        preferencesManager.bubbleAiImageScale.collectAsState(initial = 1f)
-    val bubbleImageRenderMode by
-        preferencesManager.bubbleImageRenderMode.collectAsState(
-            initial = UserPreferencesManager.BUBBLE_IMAGE_RENDER_MODE_TILED_NINE_SLICE,
-        )
-    val bubbleUserRoundedCornersEnabled by
-        preferencesManager.bubbleUserRoundedCornersEnabled.collectAsState(initial = true)
-    val bubbleAiRoundedCornersEnabled by
-        preferencesManager.bubbleAiRoundedCornersEnabled.collectAsState(initial = true)
-    val bubbleUserContentPaddingLeft by
-        preferencesManager.bubbleUserContentPaddingLeft.collectAsState(initial = 12f)
-    val bubbleUserContentPaddingRight by
-        preferencesManager.bubbleUserContentPaddingRight.collectAsState(initial = 12f)
-    val bubbleAiContentPaddingLeft by
-        preferencesManager.bubbleAiContentPaddingLeft.collectAsState(initial = 12f)
-    val bubbleAiContentPaddingRight by
-        preferencesManager.bubbleAiContentPaddingRight.collectAsState(initial = 12f)
+    val cursorUserBubbleColorValue = themeSnapshot.cursorUserBubbleColor
+    val bubbleUserBubbleColorValue = themeSnapshot.bubbleUserBubbleColor
+    val bubbleAiBubbleColorValue = themeSnapshot.bubbleAiBubbleColor
+    val bubbleUserTextColorValue = themeSnapshot.bubbleUserTextColor
+    val bubbleAiTextColorValue = themeSnapshot.bubbleAiTextColor
+    val bubbleUserUseImage = themeSnapshot.bubbleUserUseImage
+    val bubbleAiUseImage = themeSnapshot.bubbleAiUseImage
+    val bubbleUserImageUri = themeSnapshot.bubbleUserImageUri
+    val bubbleAiImageUri = themeSnapshot.bubbleAiImageUri
+    val bubbleUserImageCropLeft = themeSnapshot.bubbleUserImageCropLeft
+    val bubbleUserImageCropTop = themeSnapshot.bubbleUserImageCropTop
+    val bubbleUserImageCropRight = themeSnapshot.bubbleUserImageCropRight
+    val bubbleUserImageCropBottom = themeSnapshot.bubbleUserImageCropBottom
+    val bubbleUserImageRepeatStart = themeSnapshot.bubbleUserImageRepeatStart
+    val bubbleUserImageRepeatEnd = themeSnapshot.bubbleUserImageRepeatEnd
+    val bubbleUserImageRepeatYStart = themeSnapshot.bubbleUserImageRepeatYStart
+    val bubbleUserImageRepeatYEnd = themeSnapshot.bubbleUserImageRepeatYEnd
+    val bubbleUserImageScale = themeSnapshot.bubbleUserImageScale
+    val bubbleAiImageCropLeft = themeSnapshot.bubbleAiImageCropLeft
+    val bubbleAiImageCropTop = themeSnapshot.bubbleAiImageCropTop
+    val bubbleAiImageCropRight = themeSnapshot.bubbleAiImageCropRight
+    val bubbleAiImageCropBottom = themeSnapshot.bubbleAiImageCropBottom
+    val bubbleAiImageRepeatStart = themeSnapshot.bubbleAiImageRepeatStart
+    val bubbleAiImageRepeatEnd = themeSnapshot.bubbleAiImageRepeatEnd
+    val bubbleAiImageRepeatYStart = themeSnapshot.bubbleAiImageRepeatYStart
+    val bubbleAiImageRepeatYEnd = themeSnapshot.bubbleAiImageRepeatYEnd
+    val bubbleAiImageScale = themeSnapshot.bubbleAiImageScale
+    val bubbleImageRenderMode = themeSnapshot.bubbleImageRenderMode
+    val bubbleUserRoundedCornersEnabled = themeSnapshot.bubbleUserRoundedCornersEnabled
+    val bubbleAiRoundedCornersEnabled = themeSnapshot.bubbleAiRoundedCornersEnabled
+    val bubbleUserContentPaddingLeft = themeSnapshot.bubbleUserContentPaddingLeft
+    val bubbleUserContentPaddingRight = themeSnapshot.bubbleUserContentPaddingRight
+    val bubbleAiContentPaddingLeft = themeSnapshot.bubbleAiContentPaddingLeft
+    val bubbleAiContentPaddingRight = themeSnapshot.bubbleAiContentPaddingRight
     // Collect chat area horizontal padding from preferences
     val chatAreaHorizontalPadding by preferencesManager.chatAreaHorizontalPadding.collectAsState(initial = 16f)
 
@@ -309,7 +265,7 @@ val actualViewModel: ChatViewModel = viewModel ?: viewModel { ChatViewModel(cont
 
     val featureStates by actualViewModel.featureToggles.collectAsState()
     val enableThinkingMode by actualViewModel.enableThinkingMode.collectAsState() // 收集思考模式状态
-    val thinkingQualityLevel by actualViewModel.thinkingQualityLevel.collectAsState()
+    val thinkingOptionId by actualViewModel.thinkingOptionId.collectAsState()
     val enableMemoryAutoUpdate by actualViewModel.enableMemoryAutoUpdate.collectAsState()
     val enableMaxContextMode by actualViewModel.enableMaxContextMode.collectAsState()
     val enableTools by actualViewModel.enableTools.collectAsState()
@@ -777,8 +733,10 @@ val actualViewModel: ChatViewModel = viewModel ?: viewModel { ChatViewModel(cont
     val showWebView by actualViewModel.showWebView.collectAsState()
     // 收集AI电脑显示状态
     val showAiComputer by actualViewModel.showAiComputer.collectAsState()
+    // AppContent owns the primary chat IME layout; embedded chat retains its local translation.
     val shouldUseChatLocalImeHandling =
-        inputStyle == UserPreferencesManager.INPUT_STYLE_AGENT &&
+        embedded &&
+            inputStyle == UserPreferencesManager.INPUT_STYLE_AGENT &&
             !showWebView &&
             !showAiComputer
     var hasEverShownWebView by remember { mutableStateOf(false) }
@@ -827,7 +785,7 @@ val actualViewModel: ChatViewModel = viewModel ?: viewModel { ChatViewModel(cont
     val hasBoundWorkspace = !currentChatView?.workspace.isNullOrBlank()
 
     SideEffect {
-        if (isCurrentScreen) {
+        if (isCurrentScreen && !embedded) {
             setScreenSoftInputMode(requestedSoftInputMode)
             setUseScreenImePadding(shouldUseGlobalImePadding)
         }
@@ -836,8 +794,8 @@ val actualViewModel: ChatViewModel = viewModel ?: viewModel { ChatViewModel(cont
 
     // 当showWebView或showAiComputer状态改变时，更新TopAppBar的actions
     // 使用DisposableEffect确保当AIChatScreen离开组合时，actions被清空
-    LaunchedEffect(isCurrentScreen, showWebView, showAiComputer, isWorkspacePreparing, appBarContentColor, hasBoundWorkspace) {
-        if (isCurrentScreen) {
+    LaunchedEffect(isCurrentScreen, embedded, showWebView, showAiComputer, isWorkspacePreparing, appBarContentColor, hasBoundWorkspace) {
+        if (isCurrentScreen && !embedded) {
             setTopBarActions {
                 // AI电脑模式切换按钮
                 IconButton(
@@ -1055,9 +1013,9 @@ val actualViewModel: ChatViewModel = viewModel ?: viewModel { ChatViewModel(cont
                                     onSetPermissionLevel = actualViewModel::setMasterPermissionLevel,
                                     enableThinkingMode = enableThinkingMode,
                                     onToggleThinkingMode = { actualViewModel.toggleThinkingMode() },
-                                    thinkingQualityLevel = thinkingQualityLevel,
-                                    onThinkingQualityLevelChange = {
-                                        actualViewModel.updateThinkingQualityLevel(it)
+                                    thinkingOptionId = thinkingOptionId,
+                                    onThinkingOptionIdChange = {
+                                        actualViewModel.updateThinkingOptionId(it)
                                     },
                                     maxWindowSizeInK =
                                             actualViewModel.maxWindowSizeInK.collectAsState().value,
@@ -1080,7 +1038,7 @@ val actualViewModel: ChatViewModel = viewModel ?: viewModel { ChatViewModel(cont
                                     onSummaryTokenThresholdChange = {
                                         actualViewModel.updateSummaryTokenThreshold(it)
                                     },
-                                    onNavigateToUserPreferences = onNavigateToUserPreferences,
+                                    onNavigateToMemoryBase = onNavigateToMemoryBase,
                                     onNavigateToModelConfig = onNavigateToModelConfig,
                                     onNavigateToModelPrompts = onNavigateToModelPrompts,
                                     onNavigateToPackageManager = onNavigateToPackageManager,
@@ -1141,7 +1099,7 @@ val actualViewModel: ChatViewModel = viewModel ?: viewModel { ChatViewModel(cont
                                 enableTools = enableTools,
                                 isWorkspaceOpen = isWorkspaceOpen,
                                 enableThinkingMode = enableThinkingMode,
-                                thinkingQualityLevel = thinkingQualityLevel,
+                                thinkingOptionId = thinkingOptionId,
                                 enableMaxContextMode = enableMaxContextMode,
                                 featureStates = featureStates,
                                 enableMemoryAutoUpdate = enableMemoryAutoUpdate,
@@ -1149,7 +1107,7 @@ val actualViewModel: ChatViewModel = viewModel ?: viewModel { ChatViewModel(cont
                                 disableStreamOutput = disableStreamOutput,
                                 disableUserPreferenceDescription =
                                         disableUserPreferenceDescription,
-                                onNavigateToUserPreferences = onNavigateToUserPreferences,
+                                onNavigateToMemoryBase = onNavigateToMemoryBase,
                                 onNavigateToPackageManager = onNavigateToPackageManager,
                                 toolPromptVisibility = toolPromptVisibility,
                                 toolPromptOrder = toolPromptOrder,
@@ -1251,8 +1209,9 @@ val actualViewModel: ChatViewModel = viewModel ?: viewModel { ChatViewModel(cont
                 ),
         )
 
+        val isWorkspaceVisible = !embedded && showWebView
         val workspaceOverlayModifier =
-            if (showWebView) {
+            if (isWorkspaceVisible) {
                 Modifier
                     .fillMaxSize()
                     .clipToBounds()
@@ -1272,7 +1231,7 @@ val actualViewModel: ChatViewModel = viewModel ?: viewModel { ChatViewModel(cont
                     WorkspaceScreen(
                         actualViewModel = actualViewModel,
                         currentChat = currentChat,
-                        isVisible = showWebView, // Pass visibility state
+                        isVisible = isWorkspaceVisible, // Pass visibility state
                         onExportClick = { workDir ->
                             webContentDir = workDir
                             AppLogger.d(
@@ -1288,7 +1247,7 @@ val actualViewModel: ChatViewModel = viewModel ?: viewModel { ChatViewModel(cont
             if (measurables.isEmpty()) {
                 layout(0, 0) {}
             } else {
-                if (showWebView) {
+                if (isWorkspaceVisible) {
                     val placeable = measurables.first().measure(constraints)
                     layout(placeable.width, placeable.height) {
                         placeable.placeRelative(0, 0)
@@ -1303,7 +1262,7 @@ val actualViewModel: ChatViewModel = viewModel ?: viewModel { ChatViewModel(cont
         }
 
         // AI电脑模式作为浮层：关闭时完全移出组合，确保 SurfaceView 被释放，避免机型相关残影
-        if (showAiComputer) {
+        if (!embedded && showAiComputer) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -1314,7 +1273,7 @@ val actualViewModel: ChatViewModel = viewModel ?: viewModel { ChatViewModel(cont
         }
 
         AnimatedVisibility(
-            visible = isWorkspacePreparing,
+            visible = !embedded && isWorkspacePreparing,
             enter = fadeIn(animationSpec = tween(180)),
             exit = fadeOut(animationSpec = tween(120))
         ) {
@@ -1467,8 +1426,8 @@ val actualViewModel: ChatViewModel = viewModel ?: viewModel { ChatViewModel(cont
         }
 
         ChatToastHost(
-            message = toastEvent,
-            onDismiss = { actualViewModel.clearToastEvent() },
+            event = toastEvent,
+            onDismiss = actualViewModel::clearToastEvent,
             modifier = Modifier
                 .align(Alignment.TopCenter)
                 .padding(
@@ -1536,14 +1495,14 @@ private fun ChatInputBottomBar(
     enableTools: Boolean,
     isWorkspaceOpen: Boolean,
     enableThinkingMode: Boolean,
-    thinkingQualityLevel: Int,
+    thinkingOptionId: String,
     enableMaxContextMode: Boolean,
     featureStates: Map<String, Boolean>,
     enableMemoryAutoUpdate: Boolean,
     isAutoReadEnabled: Boolean,
     disableStreamOutput: Boolean,
     disableUserPreferenceDescription: Boolean,
-    onNavigateToUserPreferences: () -> Unit,
+    onNavigateToMemoryBase: () -> Unit,
     onNavigateToPackageManager: () -> Unit,
     toolPromptVisibility: Map<String, Boolean>,
     toolPromptOrder: List<String> = emptyList(),
@@ -1559,6 +1518,10 @@ private fun ChatInputBottomBar(
     val focusManager = LocalFocusManager.current
     val coroutineScope = rememberCoroutineScope()
     val waifuPreferences = remember(context) { WaifuPreferences.getInstance(context) }
+    val userPreferences = remember(context) { UserPreferencesManager.getInstance(context) }
+    val clipboardManager = remember(context) {
+        context.getSystemService(ClipboardManager::class.java)
+    }
 
     val userMessage by actualViewModel.userMessage.collectAsState()
     val attachments by actualViewModel.attachments.collectAsState()
@@ -1574,6 +1537,12 @@ private fun ChatInputBottomBar(
         waifuPreferences.waifuMergeSendDelayMsFlow.collectAsState(
             initial = WaifuPreferences.DEFAULT_WAIFU_MERGE_SEND_DELAY_MS
         )
+    val convertLongPastedTextToFile by
+        userPreferences.convertLongPastedTextToFile.collectAsState(initial = true)
+    val longPastedTextFileThreshold by
+        userPreferences.longPastedTextFileThreshold.collectAsState(
+            initial = UserPreferencesManager.DEFAULT_LONG_PASTED_TEXT_FILE_THRESHOLD
+        )
 
     val isMessageProcessing =
         isLoading ||
@@ -1586,11 +1555,11 @@ private fun ChatInputBottomBar(
             inputState is InputProcessingState.Receiving
     val isQueueBlocked = isMessageProcessing || isSummarizing || isSendTriggeredSummarizing
 
-    val pendingQueueMessages = remember(currentChatId) { mutableStateListOf<PendingQueueMessageItem>() }
-    var isPendingQueueExpanded by remember(currentChatId) { mutableStateOf(true) }
-    var nextPendingQueueId by remember(currentChatId) { mutableStateOf(1L) }
-    var wasQueueBlocked by remember(currentChatId) { mutableStateOf(false) }
-    var suppressNextAutoDequeue by remember(currentChatId) { mutableStateOf(false) }
+    val pendingQueueStates by actualViewModel.pendingMessageQueueStates.collectAsState()
+    val pendingQueueState =
+        currentChatId?.let { chatId -> pendingQueueStates[chatId] } ?: PendingMessageQueueState()
+    val pendingQueueMessages = pendingQueueState.messages
+    val isPendingQueueExpanded = pendingQueueState.isExpanded
     val waifuMergeBuffer = remember(currentChatId) { mutableStateListOf<String>() }
     val latestQueueBlocked = rememberUpdatedState(isQueueBlocked)
     val latestCurrentChatId = rememberUpdatedState(currentChatId)
@@ -1601,14 +1570,15 @@ private fun ChatInputBottomBar(
         selectionStart: Int = userMessage.selection.start,
         selectionEnd: Int = userMessage.selection.end,
         source: String = inputStyle,
-        submitSource: String = ""
+        submitSource: String = "",
+        chatId: String? = currentChatId,
     ): ChatInputHookContext {
         val normalizedSelectionStart = selectionStart.coerceIn(0, text.length)
         val normalizedSelectionEnd = selectionEnd.coerceIn(0, text.length)
         return ChatInputHookContext(
             context = context,
             eventName = eventName,
-            chatId = currentChatId,
+            chatId = chatId,
             text = text,
             selectionStart = normalizedSelectionStart,
             selectionEnd = normalizedSelectionEnd,
@@ -1621,7 +1591,7 @@ private fun ChatInputBottomBar(
         )
     }
 
-    fun handleUserMessageChange(value: TextFieldValue) {
+    fun commitUserMessageChange(value: TextFieldValue) {
         actualViewModel.updateUserMessage(value)
         ChatInputHookRegistry.dispatchNotification(
             buildChatInputHookContext(
@@ -1633,10 +1603,36 @@ private fun ChatInputBottomBar(
         )
     }
 
+    fun handleUserMessageChange(value: TextFieldValue) {
+        val clipboardText = clipboardManager.primaryClip?.getItemAt(0)?.text?.toString()
+        val pastedText =
+            if (convertLongPastedTextToFile && clipboardText != null) {
+                extractClipboardPastedText(userMessage, value, clipboardText)
+            } else {
+                null
+            }
+
+        if (
+            pastedText != null &&
+                pastedText.length > longPastedTextFileThreshold &&
+                !currentChatId.isNullOrBlank()
+        ) {
+            coroutineScope.launch {
+                // Keep the draft unchanged until the attachment has been created, so I/O errors do not lose text.
+                if (!actualViewModel.attachPastedText(pastedText)) {
+                    commitUserMessageChange(value)
+                }
+            }
+            return
+        }
+
+        commitUserMessageChange(value)
+    }
+
     fun showChatInputHookMessage(message: String?) {
         val normalizedMessage = message?.trim().orEmpty()
         if (normalizedMessage.isNotBlank()) {
-            Toast.makeText(context, normalizedMessage, Toast.LENGTH_SHORT).show()
+            actualViewModel.showToast(normalizedMessage)
         }
     }
 
@@ -1696,20 +1692,17 @@ private fun ChatInputBottomBar(
         )
     }
 
-    fun restorePendingQueueItem(item: PendingQueueMessageItem) {
-        if (pendingQueueMessages.none { it.id == item.id }) {
-            pendingQueueMessages.add(0, item)
-        }
+    fun restorePendingQueueItem(chatId: String, item: PendingQueueMessageItem) {
+        actualViewModel.restorePendingQueueMessage(chatId, item)
     }
 
     fun removePendingQueueMessageById(id: Long): PendingQueueMessageItem? {
-        val index = pendingQueueMessages.indexOfFirst { it.id == id }
-        if (index < 0) return null
-        return pendingQueueMessages.removeAt(index)
+        val chatId = currentChatId ?: return null
+        return actualViewModel.removePendingQueueMessage(chatId, id)
     }
 
-    val sendQueuedItemNow: (PendingQueueMessageItem, Boolean) -> Unit =
-        { item, cancelCurrentConversation ->
+    val sendQueuedItemNow: (String, PendingQueueMessageItem, Boolean) -> Unit =
+        { queueChatId, item, cancelCurrentConversation ->
             coroutineScope.launch {
                 val submitDecision =
                     ChatInputHookRegistry.dispatchSubmitRequested(
@@ -1719,12 +1712,13 @@ private fun ChatInputBottomBar(
                             selectionStart = item.text.length,
                             selectionEnd = item.text.length,
                             source = "queue",
-                            submitSource = "queue"
+                            submitSource = "queue",
+                            chatId = queueChatId,
                         )
                     )
                 when (submitDecision.action) {
                     ChatInputSubmitActions.BLOCK -> {
-                        restorePendingQueueItem(item)
+                        restorePendingQueueItem(queueChatId, item)
                         showChatInputHookMessage(submitDecision.message)
                         return@launch
                     }
@@ -1733,31 +1727,24 @@ private fun ChatInputBottomBar(
                         return@launch
                     }
                 }
+                showChatInputHookMessage(submitDecision.noticeMessage)
                 val finalText = submitDecision.text ?: item.text
                 val shouldWaitForCancel = cancelCurrentConversation && latestQueueBlocked.value
                 if (shouldWaitForCancel) {
-                    suppressNextAutoDequeue = true
+                    actualViewModel.suppressNextPendingQueueAutoDequeue(queueChatId)
                 }
                 if (cancelCurrentConversation) {
-                    actualViewModel.cancelCurrentMessage()
+                    actualViewModel.cancelMessage(queueChatId)
                 }
                 if (shouldWaitForCancel) {
                     snapshotFlow { latestQueueBlocked.value }.first { !it }
                 }
 
-                val chatId = latestCurrentChatId.value
-                if (chatId.isNullOrBlank()) {
-                    Toast.makeText(
-                        context,
-                        context.getString(R.string.chat_please_create_new_chat),
-                        Toast.LENGTH_SHORT,
-                    ).show()
-                    return@launch
-                }
-
                 focusManager.clearFocus()
-                actualViewModel.sendTextMessage(finalText)
-                onRequestAutoScrollToBottom()
+                actualViewModel.sendTextMessage(finalText, chatId = queueChatId)
+                if (latestCurrentChatId.value == queueChatId) {
+                    onRequestAutoScrollToBottom()
+                }
                 ChatInputHookRegistry.dispatchNotification(
                     buildChatInputHookContext(
                         eventName = ChatInputEvents.SUBMITTED,
@@ -1765,39 +1752,36 @@ private fun ChatInputBottomBar(
                         selectionStart = finalText.length,
                         selectionEnd = finalText.length,
                         source = "queue",
-                        submitSource = "queue"
+                        submitSource = "queue",
+                        chatId = queueChatId,
                     )
                 )
             }
         }
 
     LaunchedEffect(isQueueBlocked, pendingQueueMessages.size, currentChatId) {
-        if (wasQueueBlocked && !isQueueBlocked) {
-            if (suppressNextAutoDequeue) {
-                suppressNextAutoDequeue = false
-            } else if (pendingQueueMessages.isNotEmpty()) {
-                delay(250)
-                if (!latestQueueBlocked.value && pendingQueueMessages.isNotEmpty()) {
-                    val nextMessage = pendingQueueMessages.removeAt(0)
-                    sendQueuedItemNow(nextMessage, false)
+        val queueChatId = currentChatId ?: return@LaunchedEffect
+        if (actualViewModel.consumePendingQueueAutoDequeueSignal(queueChatId, isQueueBlocked)) {
+            delay(250)
+            val nextMessage = pendingQueueMessages.firstOrNull()
+            if (!latestQueueBlocked.value && nextMessage != null) {
+                actualViewModel.removePendingQueueMessage(queueChatId, nextMessage.id)?.let { item ->
+                    sendQueuedItemNow(queueChatId, item, false)
                 }
             }
         }
-        wasQueueBlocked = isQueueBlocked
     }
 
     fun enqueueDraftToPendingQueue() {
         val draftText = userMessage.text.trim()
         if (draftText.isBlank()) return
+        val chatId = currentChatId ?: return
 
-        pendingQueueMessages.add(
-            PendingQueueMessageItem(
-                id = nextPendingQueueId,
-                text = draftText,
-            ),
+        actualViewModel.enqueuePendingQueueMessage(
+            chatId = chatId,
+            text = draftText,
+            isQueueBlocked = isQueueBlocked,
         )
-        nextPendingQueueId += 1
-        isPendingQueueExpanded = true
         actualViewModel.updateUserMessage(TextFieldValue(""))
         actualViewModel.showToast(context.getString(R.string.chat_queue_added))
     }
@@ -1834,6 +1818,7 @@ private fun ChatInputBottomBar(
                     return@launch
                 }
             }
+            showChatInputHookMessage(submitDecision.noticeMessage)
 
             val finalText = submitDecision.text ?: userMessage.text
             if (finalText != userMessage.text) {
@@ -1912,8 +1897,8 @@ private fun ChatInputBottomBar(
                 isWorkspaceOpen = isWorkspaceOpen,
                 enableThinkingMode = enableThinkingMode,
                 onToggleThinkingMode = actualViewModel::toggleThinkingMode,
-                thinkingQualityLevel = thinkingQualityLevel,
-                onThinkingQualityLevelChange = actualViewModel::updateThinkingQualityLevel,
+                thinkingOptionId = thinkingOptionId,
+                onThinkingOptionIdChange = actualViewModel::updateThinkingOptionId,
                 enableMaxContextMode = enableMaxContextMode,
                 onToggleEnableMaxContextMode = actualViewModel::toggleEnableMaxContextMode,
                 currentChatId = currentChatId,
@@ -1932,7 +1917,7 @@ private fun ChatInputBottomBar(
                 disableUserPreferenceDescription = disableUserPreferenceDescription,
                 onToggleDisableUserPreferenceDescription =
                     actualViewModel::toggleDisableUserPreferenceDescription,
-                onNavigateToUserPreferences = onNavigateToUserPreferences,
+                onNavigateToMemoryBase = onNavigateToMemoryBase,
                 onNavigateToPackageManager = onNavigateToPackageManager,
                 toolPromptVisibility = toolPromptVisibility,
                 onSaveToolPromptVisibilityMap = actualViewModel::saveToolPromptVisibilityMap,
@@ -1945,7 +1930,11 @@ private fun ChatInputBottomBar(
                 characterCardBoundMemoryProfileId = characterCardBoundMemoryProfileId,
                 pendingQueueMessages = pendingQueueMessages,
                 isPendingQueueExpanded = isPendingQueueExpanded,
-                onPendingQueueExpandedChange = { isPendingQueueExpanded = it },
+                onPendingQueueExpandedChange = { expanded ->
+                    currentChatId?.let { chatId ->
+                        actualViewModel.setPendingQueueExpanded(chatId, expanded)
+                    }
+                },
                 onDeletePendingQueueMessage = { id ->
                     removePendingQueueMessageById(id)
                 },
@@ -1962,7 +1951,9 @@ private fun ChatInputBottomBar(
                 },
                 onSendPendingQueueMessage = { id ->
                     removePendingQueueMessageById(id)?.let { queueItem ->
-                        sendQueuedItemNow(queueItem, true)
+                        currentChatId?.let { chatId ->
+                            sendQueuedItemNow(chatId, queueItem, true)
+                        }
                     }
                 },
         )
@@ -2002,7 +1993,11 @@ private fun ChatInputBottomBar(
                 isWorkspaceOpen = isWorkspaceOpen,
                 pendingQueueMessages = pendingQueueMessages,
                 isPendingQueueExpanded = isPendingQueueExpanded,
-                onPendingQueueExpandedChange = { isPendingQueueExpanded = it },
+                onPendingQueueExpandedChange = { expanded ->
+                    currentChatId?.let { chatId ->
+                        actualViewModel.setPendingQueueExpanded(chatId, expanded)
+                    }
+                },
                 onDeletePendingQueueMessage = { id ->
                     removePendingQueueMessageById(id)
                 },
@@ -2019,7 +2014,9 @@ private fun ChatInputBottomBar(
                 },
                 onSendPendingQueueMessage = { id ->
                     removePendingQueueMessageById(id)?.let { queueItem ->
-                        sendQueuedItemNow(queueItem, true)
+                        currentChatId?.let { chatId ->
+                            sendQueuedItemNow(chatId, queueItem, true)
+                        }
                     }
                 },
         )

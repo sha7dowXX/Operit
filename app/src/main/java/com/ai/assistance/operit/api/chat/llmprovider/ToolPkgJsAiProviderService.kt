@@ -14,6 +14,7 @@ import com.ai.assistance.operit.plugins.toolpkg.ToolPkgAiProviderRegistration
 import com.ai.assistance.operit.plugins.toolpkg.decodeToolPkgHookResult
 import com.ai.assistance.operit.plugins.toolpkg.jsonObjectToMap
 import com.ai.assistance.operit.plugins.toolpkg.toolPkgPackageManager
+import com.ai.assistance.operit.util.ChatUtils
 import com.ai.assistance.operit.util.stream.Stream
 import java.util.UUID
 import kotlinx.coroutines.coroutineScope
@@ -28,7 +29,7 @@ internal class ToolPkgJsAiProviderService(
     private val config: ModelConfigData,
     private val provider: ToolPkgAiProviderRegistration
 ) : AIService {
-    private sealed interface ProviderHookValue {
+    internal sealed interface ProviderHookValue {
         data object NullValue : ProviderHookValue
 
         data class TextValue(
@@ -53,13 +54,13 @@ internal class ToolPkgJsAiProviderService(
     }
 
     @Volatile
-    private var currentInputTokenCount: Int = 0
+    private var currentInputTokenCount: Long = 0L
 
     @Volatile
-    private var currentCachedInputTokenCount: Int = 0
+    private var currentCachedInputTokenCount: Long = 0L
 
     @Volatile
-    private var currentOutputTokenCount: Int = 0
+    private var currentOutputTokenCount: Long = 0L
 
     private val executionChatId =
         "toolpkg-ai-provider:${provider.providerId}:${UUID.randomUUID().toString().replace("-", "")}"
@@ -67,27 +68,34 @@ internal class ToolPkgJsAiProviderService(
     private val providerRuntimeContextKey =
         "toolpkg_provider:${provider.containerPackageName}:${provider.providerId.trim().lowercase()}"
 
-    override val inputTokenCount: Int
+    override val inputTokenCount: Long
         get() = currentInputTokenCount
 
-    override val cachedInputTokenCount: Int
+    override val cachedInputTokenCount: Long
         get() = currentCachedInputTokenCount
 
-    override val outputTokenCount: Int
+    override val outputTokenCount: Long
         get() = currentOutputTokenCount
 
     override val providerModel: String
         get() = "${provider.displayName}:${config.modelName}"
 
     override fun resetTokenCounts() {
-        currentInputTokenCount = 0
-        currentCachedInputTokenCount = 0
-        currentOutputTokenCount = 0
+        currentInputTokenCount = 0L
+        currentCachedInputTokenCount = 0L
+        currentOutputTokenCount = 0L
     }
 
     override fun cancelStreaming() {
         toolPkgPackageManager().cancelToolPkgExecutionsForChat(executionChatId)
     }
+
+    /**
+     * 测试缝：替换真实包管理器 hook 调用，使 sendMessage 的真实 hook 编排层
+     * （intermediate channel、解码、usage 提取、chunk 发射、attempt 语义）
+     * 可在 JVM 测试中验证；生产为 null（走真实 [PackageManager]）。
+     */
+    internal var mainHookRunnerOverride: ToolPkgMainHookRunner? = null
 
     override suspend fun getModelsList(context: Context): Result<List<ModelOption>> {
         return runCatching {
@@ -111,11 +119,15 @@ internal class ToolPkgJsAiProviderService(
         stream: Boolean,
         availableTools: List<ToolPrompt>?,
         preserveThinkInHistory: Boolean,
-        onTokensUpdated: suspend (input: Int, cachedInput: Int, output: Int) -> Unit,
+        onTokensUpdated: suspend (input: Long, cachedInput: Long, output: Long) -> Unit,
+        onUsageReported: (suspend (com.ai.assistance.operit.data.stats.ProviderUsageSnapshot, attempt: Int) -> Unit)?,
         onNonFatalError: suspend (error: String) -> Unit,
-        enableRetry: Boolean
+        enableRetry: Boolean,
+        recordTokenUsage: Boolean,
+        onUsageFinalized: (suspend (attempt: Int?) -> Unit)?,
     ): Stream<String> = com.ai.assistance.operit.util.stream.stream {
         var hasIntermediateTextChunk = false
+        var hasLegacyUsage = false
         val decoded =
             invokeProviderFunction(
                 functionName = provider.sendMessageFunctionName,
@@ -135,14 +147,10 @@ internal class ToolPkgJsAiProviderService(
                         put("enableRetry", enableRetry)
                     },
                 onIntermediateResult = { intermediateDecoded ->
-                    extractUsage(intermediateDecoded)?.let { usage ->
-                        applyUsage(usage)
-                        onTokensUpdated(
-                            currentInputTokenCount,
-                            currentCachedInputTokenCount,
-                            currentOutputTokenCount
-                        )
-                    }
+                    applyAndForwardUsage(intermediateDecoded, onTokensUpdated, onUsageReported)
+                        ?.let { usage ->
+                            if (!usage.attemptPresent) hasLegacyUsage = true
+                        }
                     extractNonFatalError(intermediateDecoded)?.let { error ->
                         onNonFatalError(error)
                     }
@@ -153,15 +161,9 @@ internal class ToolPkgJsAiProviderService(
                 }
             )
 
+        // 最终结果的 usage 必须和明确的成功完成信号属于同一个 attempt。
+        val finalUsage = applyAndForwardUsage(decoded, onTokensUpdated, onUsageReported)
         ensureNoFatalError(decoded)
-        extractUsage(decoded)?.let { usage ->
-            applyUsage(usage)
-            onTokensUpdated(
-                currentInputTokenCount,
-                currentCachedInputTokenCount,
-                currentOutputTokenCount
-            )
-        }
         extractNonFatalError(decoded)?.let { error ->
             onNonFatalError(error)
         }
@@ -170,17 +172,23 @@ internal class ToolPkgJsAiProviderService(
                 emit(chunk)
             }
         }
+        val finalAttempt = finalUsage?.attempt ?: extractAttemptNumber(decoded)
+        onUsageFinalized?.invoke(finalAttempt ?: if (hasLegacyUsage) 1 else null)
     }
 
     override suspend fun testConnection(context: Context): Result<String> {
-        return runCatching {
-            val decoded =
+        val decoded =
+            try {
                 invokeProviderFunction(
                     functionName = provider.testConnectionFunctionName,
                     functionSource = provider.testConnectionFunctionSource,
                     event = TOOLPKG_EVENT_AI_PROVIDER_TEST_CONNECTION,
-                    eventPayload = buildBasePayload(context)
+                    eventPayload = buildBasePayload(context),
                 )
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            }
+        return runCatching {
             ensureNoFatalError(decoded)
             parseConnectionMessage(decoded)
         }
@@ -189,7 +197,7 @@ internal class ToolPkgJsAiProviderService(
     override suspend fun calculateInputTokens(
         chatHistory: List<PromptTurn>,
         availableTools: List<ToolPrompt>?
-    ): Int {
+    ): Long {
         val decoded =
             invokeProviderFunction(
                 functionName = provider.calculateInputTokensFunctionName,
@@ -219,7 +227,6 @@ internal class ToolPkgJsAiProviderService(
         eventPayload: JSONObject,
         onIntermediateResult: (suspend (ProviderHookValue) -> Unit)? = null
     ): ProviderHookValue = coroutineScope {
-        val manager = toolPkgPackageManager()
         val intermediateChannel =
             if (onIntermediateResult == null) {
                 null
@@ -240,26 +247,50 @@ internal class ToolPkgJsAiProviderService(
         try {
             val result =
                 withContext(Dispatchers.IO) {
-                    manager.runToolPkgMainHook(
-                        containerPackageName = provider.containerPackageName,
-                        functionName = functionName,
-                        event = event,
-                        pluginId = "${provider.providerId}:$event",
-                        inlineFunctionSource = functionSource,
-                        eventPayload =
-                            jsonObjectToMap(
-                                JSONObject(eventPayload.toString()).put("chatId", executionChatId)
-                            ),
-                        executionContextKey = providerRuntimeContextKey,
-                        runtimeKind = "provider",
-                        dispatchIntermediateOnMain = false,
-                        onIntermediateResult =
-                            intermediateChannel?.let { channel ->
-                                { raw ->
-                                    channel.trySend(raw)
+                    val override = mainHookRunnerOverride
+                    if (override != null) {
+                        override.run(
+                            containerPackageName = provider.containerPackageName,
+                            functionName = functionName,
+                            event = event,
+                            pluginId = "${provider.providerId}:$event",
+                            inlineFunctionSource = functionSource,
+                            eventPayload =
+                                jsonObjectToMap(
+                                    JSONObject(eventPayload.toString()).put("chatId", executionChatId)
+                                ),
+                            executionContextKey = providerRuntimeContextKey,
+                            runtimeKind = "provider",
+                            onIntermediateResult =
+                                intermediateChannel?.let { channel ->
+                                    { raw ->
+                                        channel.trySend(raw)
+                                    }
                                 }
-                            }
-                    )
+                        )
+                    } else {
+                        val manager = toolPkgPackageManager()
+                        manager.runToolPkgMainHook(
+                            containerPackageName = provider.containerPackageName,
+                            functionName = functionName,
+                            event = event,
+                            pluginId = "${provider.providerId}:$event",
+                            inlineFunctionSource = functionSource,
+                            eventPayload =
+                                jsonObjectToMap(
+                                    JSONObject(eventPayload.toString()).put("chatId", executionChatId)
+                                ),
+                            executionContextKey = providerRuntimeContextKey,
+                            runtimeKind = "provider",
+                            dispatchIntermediateOnMain = false,
+                            onIntermediateResult =
+                                intermediateChannel?.let { channel ->
+                                    { raw ->
+                                        channel.trySend(raw)
+                                    }
+                                }
+                        )
+                    }
                 }
             decodeProviderHookValue(
                 result.getOrElse { error -> throw error }?.let { raw -> decodeToolPkgHookResult(raw) }
@@ -305,7 +336,7 @@ internal class ToolPkgJsAiProviderService(
     private fun serializePromptTurn(turn: PromptTurn): JSONObject {
         return jsonObjectOf(
             "kind" to turn.kind.name,
-            "content" to turn.content,
+            "content" to ChatUtils.stripOpenAiResponsesProtocolMarkup(turn.content),
             "toolName" to turn.toolName,
             "metadata" to turn.metadata
         )
@@ -432,11 +463,11 @@ internal class ToolPkgJsAiProviderService(
         }
     }
 
-    private fun parseTokenCount(decoded: ProviderHookValue): Int {
+    private fun parseTokenCount(decoded: ProviderHookValue): Long {
         return when (decoded) {
-            is ProviderHookValue.NumberValue -> decoded.value.toTokenCountInt()
+            is ProviderHookValue.NumberValue -> decoded.value.toTokenCountLong()
             is ProviderHookValue.TextValue ->
-                decoded.value.trim().toBigDecimalOrNull()?.toTokenCountInt()
+                decoded.value.trim().toBigDecimalOrNull()?.toTokenCountLong()
                     ?: throw IllegalStateException("Invalid token count result: ${decoded.value}")
             is ProviderHookValue.ObjectValue -> {
                 decoded.value.optTokenCount("tokens", "inputTokens", "count")
@@ -446,36 +477,40 @@ internal class ToolPkgJsAiProviderService(
         }
     }
 
-    private fun Number.toTokenCountInt(): Int {
-        return when (this) {
-            is java.math.BigDecimal -> toTokenCountInt()
-            is java.math.BigInteger ->
-                coerceIn(java.math.BigInteger.ZERO, java.math.BigInteger.valueOf(Int.MAX_VALUE.toLong()))
-                    .toLong()
-                    .toTokenCountInt()
-            else -> toLong().toTokenCountInt()
-        }
+    private fun Number.toTokenCountLong(): Long {
+        return toString().toBigDecimal().toTokenCountLong()
     }
 
-    private fun java.math.BigDecimal.toTokenCountInt(): Int {
-        return coerceIn(java.math.BigDecimal.ZERO, java.math.BigDecimal.valueOf(Int.MAX_VALUE.toLong()))
-            .toLong()
-            .toTokenCountInt()
+    private fun java.math.BigDecimal.toTokenCountLong(): Long {
+        return longValueExact().coerceAtLeast(0L)
     }
 
-    private fun Long.toTokenCountInt(): Int {
-        return coerceIn(0L, Int.MAX_VALUE.toLong()).toInt()
-    }
-
-    private fun JSONObject.optTokenCount(vararg keys: String): Int? {
+    private fun JSONObject.optTokenCount(vararg keys: String): Long? {
         for (key in keys) {
             if (!has(key) || isNull(key)) continue
             val parsed = when (val raw = opt(key)) {
-                is Number -> raw.toTokenCountInt()
-                is String -> raw.trim().toBigDecimalOrNull()?.toTokenCountInt()
+                is Number -> raw.toTokenCountLong()
+                is String -> raw.trim().toBigDecimalOrNull()?.toTokenCountLong()
                 else -> null
             }
             if (parsed != null) return parsed
+        }
+        return null
+    }
+
+    /**
+     * 账本路径的 Long 读取（评审 P2-1）：全程 Long，绝不 Int 截断/回绕；
+     * 负值拒绝为未知（null）。
+     */
+    private fun JSONObject.optTokenCountLong(vararg keys: String): Long? {
+        for (key in keys) {
+            if (!has(key) || isNull(key)) continue
+            val parsed = when (val raw = opt(key)) {
+                is Number -> raw.toLong()
+                is String -> raw.trim().toBigDecimalOrNull()?.toLong()
+                else -> null
+            }
+            if (parsed != null) return parsed.takeIf { it >= 0 }
         }
         return null
     }
@@ -507,33 +542,96 @@ internal class ToolPkgJsAiProviderService(
         }
     }
 
-    private fun extractUsage(decoded: ProviderHookValue): TokenUsage? {
+    /**
+     * 提取 usage。usage 协议（评审 P1-6/P2-1，**不猜测 attempt、不继承全局计数**）：
+     * - **新协议**：usage 对象（或顶层）携带 `attempt` / `attemptNumber`
+      *   （provider 内部第几次尝试，从 1 开始）。同 attempt 的多次上报是流式
+      *   部分更新（省略字段保留旧值）；统计层仅保留最终成功 attempt 的快照。
+     * - **旧协议**：不携带 attempt 字段。语义为**整个逻辑请求的累计快照**
+     *   （跨内部重试累计的最终数字），固定按 attempt 1 完整快照记账（后报覆盖
+     *   先报，绝不把多个无 attempt 上报误累加）。内部按 attempt 逐次上报的
+     *   插件必须迁移到新协议。
+     * - 账本字段可空：缺省字段 = 未知，**绝不**用全局 current 计数填充（避免
+     *   跨 attempt 继承造成虚假累计）；负值拒绝为未知。
+     */
+    internal fun extractUsage(decoded: ProviderHookValue): TokenUsage? {
         return when (decoded) {
             is ProviderHookValue.ObjectValue -> extractUsageFromJson(decoded.value)
             else -> null
         }
     }
 
+    private fun extractAttemptNumber(decoded: ProviderHookValue): Int? {
+        val json = (decoded as? ProviderHookValue.ObjectValue)?.value ?: return null
+        val source = json.optJSONObject("usage") ?: json
+        if (!source.has("attempt") && !source.has("attemptNumber")) return null
+        return source.optTokenCountLong("attempt", "attemptNumber")?.coerceAtLeast(1)?.toInt()
+    }
+
     private fun extractUsageFromJson(json: JSONObject): TokenUsage? {
         val usageObject = json.optJSONObject("usage")
         val source = usageObject ?: json
-        val input = source.optTokenCount("input", "inputTokens")
-        val cachedInput = source.optTokenCount("cachedInput", "cachedInputTokens")
-        val output = source.optTokenCount("output", "outputTokens")
+        val input = source.optTokenCountLong("input", "inputTokens")
+        val cachedInput = source.optTokenCountLong("cachedInput", "cachedInputTokens")
+        val output = source.optTokenCountLong("output", "outputTokens")
         if (input == null && cachedInput == null && output == null) {
             return null
         }
+        val attemptPresent = source.has("attempt") || source.has("attemptNumber")
+        val attempt =
+            source.optTokenCountLong("attempt", "attemptNumber")?.coerceAtLeast(1)?.toInt() ?: 1
         return TokenUsage(
-            input = input ?: currentInputTokenCount,
-            cachedInput = cachedInput ?: currentCachedInputTokenCount,
-            output = output ?: currentOutputTokenCount
+            input = input,
+            cachedInput = cachedInput,
+            output = output,
+            attempt = attempt,
+            attemptPresent = attemptPresent,
+        )
+    }
+
+    /**
+     * sendMessage 通道：提取 → 更新 UI 累计计数 → 转发规范化 usage。
+     * UI 计数器与账本快照分离（评审 P1-6）：缺省字段只保留 UI 侧全局累计值，
+     * 请求快照保持未知，由外层 request tracker 按 attempt 合并。
+     */
+    private suspend fun applyAndForwardUsage(
+        decoded: ProviderHookValue,
+        onTokensUpdated: suspend (input: Long, cachedInput: Long, output: Long) -> Unit,
+        onUsageReported: (suspend (com.ai.assistance.operit.data.stats.ProviderUsageSnapshot, attempt: Int) -> Unit)?,
+    ): TokenUsage? {
+        val usage = extractUsage(decoded) ?: return null
+        applyUsage(usage)
+        onTokensUpdated(
+            currentInputTokenCount,
+            currentCachedInputTokenCount,
+            currentOutputTokenCount
+        )
+        forwardUsage(usage, onUsageReported)
+        return usage
+    }
+
+    /** 只转发规范化 usage（testConnection 等无 UI 计数通道的场景共用）；接收已解析的 usage，避免重复解析。 */
+    private suspend fun forwardUsage(
+        usage: TokenUsage,
+        onUsageReported: (suspend (com.ai.assistance.operit.data.stats.ProviderUsageSnapshot, Int) -> Unit)?,
+    ) {
+        onUsageReported?.invoke(
+            com.ai.assistance.operit.data.stats.ProviderUsageNormalizer.toolPkg(
+                input = usage.input,
+                cachedInput = usage.cachedInput,
+                output = usage.output,
+                // 协议语义：attempt 在场 = 同 attempt 部分更新；缺省 = 整个
+                // 逻辑请求的累计完整快照
+                completeSnapshot = !usage.attemptPresent,
+            ),
+            usage.attempt
         )
     }
 
     private fun applyUsage(usage: TokenUsage) {
-        currentInputTokenCount = usage.input.coerceAtLeast(0)
-        currentCachedInputTokenCount = usage.cachedInput.coerceAtLeast(0)
-        currentOutputTokenCount = usage.output.coerceAtLeast(0)
+        currentInputTokenCount = (usage.input ?: 0L).coerceAtLeast(0L)
+        currentCachedInputTokenCount = (usage.cachedInput ?: 0L).coerceAtLeast(0L)
+        currentOutputTokenCount = (usage.output ?: 0L).coerceAtLeast(0L)
     }
 
     private fun extractMessageChunks(decoded: ProviderHookValue): List<String> {
@@ -582,10 +680,33 @@ internal class ToolPkgJsAiProviderService(
             entries.forEach { (key, value) -> put(key, value) }
         }
     }
+}
 
-    private data class TokenUsage(
-        val input: Int,
-        val cachedInput: Int,
-        val output: Int
-    )
+internal data class TokenUsage(
+    /** 可空（评审 P1-6）：缺省字段 = 未知，绝不继承全局累计计数。 */
+    val input: Long?,
+    val cachedInput: Long?,
+    val output: Long?,
+    val attempt: Int = 1,
+    /** 上报是否显式携带 attempt 字段（新协议）；false = 旧协议累计快照。 */
+    val attemptPresent: Boolean = false,
+)
+
+/**
+ * ToolPkg hook 调用抽象（测试缝）：与 [PackageManager.runToolPkgMainHook] 相同的
+ * 调用面。生产路径由 [ToolPkgJsAiProviderService.mainHookRunnerOverride] 为 null
+ * 时走真实包管理器；测试注入假 runner 驱动真实 hook 编排层。
+ */
+internal fun interface ToolPkgMainHookRunner {
+    suspend fun run(
+        containerPackageName: String,
+        functionName: String,
+        event: String,
+        pluginId: String?,
+        inlineFunctionSource: String?,
+        eventPayload: Map<String, Any?>,
+        executionContextKey: String?,
+        runtimeKind: String?,
+        onIntermediateResult: ((Any?) -> Unit)?,
+    ): Result<Any?>
 }

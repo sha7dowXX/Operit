@@ -37,7 +37,6 @@ import com.ai.assistance.operit.core.workflow.WorkflowSchedulerInitializer
 import com.ai.assistance.operit.data.backup.RoomDatabaseBackupPreferences
 import com.ai.assistance.operit.data.backup.RoomDatabaseBackupScheduler
 import com.ai.assistance.operit.data.db.AppDatabase
-import com.ai.assistance.operit.data.preferences.CharacterCardManager
 import com.ai.assistance.operit.data.preferences.ExternalHttpApiPreferences
 import com.ai.assistance.operit.data.preferences.UserPreferencesManager
 import com.ai.assistance.operit.data.preferences.WakeWordPreferences
@@ -45,6 +44,7 @@ import com.ai.assistance.operit.data.preferences.initAndroidPermissionPreference
 import com.ai.assistance.operit.data.preferences.initUserPreferencesManager
 import com.ai.assistance.operit.data.preferences.preferencesManager
 import com.ai.assistance.operit.data.repository.CustomEmojiRepository
+import com.ai.assistance.operit.data.stats.TokenUsageRepository
 import com.ai.assistance.operit.ui.features.chat.webview.LocalWebServer
 import com.ai.assistance.operit.ui.features.chat.webview.workspace.editor.language.LanguageFactory
 import com.ai.assistance.operit.util.GlobalExceptionHandler
@@ -123,6 +123,10 @@ class OperitApplication : Application(), ImageLoaderFactory, WorkConfiguration.P
         appStartupTimeMs = startTime
         instance = this
 
+        // Workers and receivers can cold-start the process without creating an Activity.
+        // Initialize process-wide preference dependencies before those entry points can run.
+        initAndroidPermissionPreferences(applicationContext)
+
         configureOpenMpEnvironment()
         Thread.setDefaultUncaughtExceptionHandler(GlobalExceptionHandler(this))
 
@@ -174,8 +178,17 @@ class OperitApplication : Application(), ImageLoaderFactory, WorkConfiguration.P
         initUserPreferencesManager(applicationContext, defaultProfileName)
         AppLogger.d(TAG, "【启动计时】用户偏好管理器初始化完成 - ${System.currentTimeMillis() - startTime}ms")
 
-        initAndroidPermissionPreferences(applicationContext)
-        AppLogger.d(TAG, "【启动计时】Android权限偏好管理器初始化完成 - ${System.currentTimeMillis() - startTime}ms")
+        // Run the legacy token import during startup so upgrades retain statistics
+        // even when the user opens another screen before visiting token stats.
+        applicationScope.launch {
+            try {
+                TokenUsageRepository.getInstance(applicationContext).ensureInitialized()
+            } catch (error: Throwable) {
+                AppLogger.e(TAG, "Token statistics migration failed", error)
+            }
+        }
+
+        AppLogger.d(TAG, "【启动计时】Android权限偏好管理器已就绪 - ${System.currentTimeMillis() - startTime}ms")
 
         // 在最早时机初始化并应用语言设置（必须在获取字符串资源之前）
         initializeAppLanguage()
@@ -213,13 +226,6 @@ class OperitApplication : Application(), ImageLoaderFactory, WorkConfiguration.P
         memoryAutoSaveScheduler = MemoryAutoSaveScheduler(applicationContext, applicationScope)
             .also { it.start() }
         AppLogger.d(TAG, "【启动计时】长期记忆自动保存轮询器启动完成 - ${System.currentTimeMillis() - startTime}ms")
-
-        // 初始化功能提示词管理器
-        applicationScope.launch {
-            val characterStartTime = System.currentTimeMillis()
-            CharacterCardManager.getInstance(applicationContext).initializeIfNeeded()
-            AppLogger.d(TAG, "【启动计时】功能提示词管理器初始化完成（异步） - ${System.currentTimeMillis() - characterStartTime}ms")
-        }
 
         // 初始化当前活跃角色目标的自定义表情
         applicationScope.launch {
@@ -570,15 +576,13 @@ class OperitApplication : Application(), ImageLoaderFactory, WorkConfiguration.P
         try {
             val code = LocaleUtils.getCurrentLanguage(base)
             val locale = LocaleUtils.getLocaleForLanguageCode(code, base)
-            val config = Configuration(base.resources.configuration)
+            val config = LocaleUtils.createLocaleOverrideConfiguration(locale)
 
             // 设置语言配置
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
                 val localeList = LocaleList(locale)
                 LocaleList.setDefault(localeList)
-                config.setLocales(localeList)
             } else {
-                config.locale = locale
                 Locale.setDefault(locale)
             }
 

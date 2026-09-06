@@ -5,7 +5,6 @@ import com.ai.assistance.operit.util.AppLogger
 import com.ai.assistance.operit.core.tools.StringResultData
 import com.ai.assistance.operit.core.tools.ToolExecutionLimits
 import com.ai.assistance.operit.core.tools.ToolExecutor
-import com.ai.assistance.operit.data.mcp.plugins.MCPBridgeClient
 import com.ai.assistance.operit.data.model.AITool
 import com.ai.assistance.operit.data.model.ToolResult
 import com.ai.assistance.operit.data.model.ToolValidationResult
@@ -25,7 +24,15 @@ class MCPToolExecutor(private val context: Context, private val mcpManager: MCPM
         ToolExecutor {
     companion object {
         private const val TAG = "MCPToolExecutor"
+        private const val REPLACEMENT_CHARACTER = '\uFFFD'
     }
+
+    private data class ArgumentIntegrityViolation(
+            val parameterName: String,
+            val replacementCharacterCount: Int,
+            val characterOffset: Int,
+            val utf8ByteOffset: Int
+    )
 
     /** 保存过长的 MCP 结果，并返回适合内联展示的内容 */
     private fun persistLongResultIfNeeded(
@@ -64,7 +71,7 @@ class MCPToolExecutor(private val context: Context, private val mcpManager: MCPM
     /**
      * 从 MCP 结果中提取内容
      * 
-     * 解析 content 数组，智能识别并提取不同类型的内容：
+     * 解析标准 content 数组和 structuredContent，智能识别并提取不同类型的内容：
      * - text: 直接提取文本，如果是 JSON 字符串则尝试格式化
      * - image: 显示图像信息
      * - resource: 提取资源内容或显示资源信息
@@ -77,105 +84,123 @@ class MCPToolExecutor(private val context: Context, private val mcpManager: MCPM
             return "{}"
         }
 
-        // 提取 content 数组中的内容
-        val contentArray = resultData.optJSONArray("content")
-        val contentText =
-                if (contentArray != null && contentArray.length() > 0) {
-                    val extractedText = StringBuilder()
-                    for (i in 0 until contentArray.length()) {
-                        val contentItem = contentArray.optJSONObject(i) ?: continue
-                        val contentType = contentItem.optString("type", "text")
-
-                        when (contentType) {
-                            "text" -> {
-                                val text = contentItem.optString("text", "")
-                                val processedText =
-                                        if (isJsonString(text)) {
-                                            try {
-                                                formatJson(text)
-                                            } catch (e: Exception) {
-                                                text
-                                            }
-                                        } else {
-                                            text
-                                        }
-                                extractedText.append(processedText)
-                            }
-                            "image" -> {
-                                val mimeType = contentItem.optString("mimeType", "image/png")
-                                val data = contentItem.optString("data", "")
-                                if (data.isNotEmpty()) {
-                                    val imageId = ImagePoolManager.addImageFromBase64(data, mimeType)
-                                    if (imageId != "error") {
-                                        extractedText.append("<link type=\"image\" id=\"$imageId\"></link>")
-                                    } else {
-                                        val dataSize = data.length
-                                        extractedText.append("[Image: $mimeType, Size: $dataSize bytes]")
-                                    }
-                                } else {
-                                    extractedText.append("[Image: $mimeType, Size: 0 bytes]")
-                                }
-                            }
-                            "resource" -> {
-                                val resource = contentItem.optJSONObject("resource")
-                                if (resource != null) {
-                                    val uri = resource.optString("uri", "")
-                                    val text = resource.optString("text")
-                                    val mimeType = resource.optString("mimeType", "")
-                                    val blob = resource.optString("blob", "")
-                                    val data = if (blob.isNotEmpty()) blob else resource.optString("data", "")
-                                    val isImage = mimeType.startsWith("image/") && data.isNotEmpty()
-                                    if (isImage) {
-                                        val finalMimeType = if (mimeType.isNotEmpty()) mimeType else "image/png"
-                                        val imageId = ImagePoolManager.addImageFromBase64(data, finalMimeType)
-                                        if (imageId != "error") {
-                                            extractedText.append("<link type=\"image\" id=\"$imageId\"></link>")
-                                        } else if (text != null && text.isNotEmpty()) {
-                                            extractedText.append(text)
-                                        } else {
-                                            extractedText.append("[Resource: $uri]")
-                                        }
-                                    } else if (text != null && text.isNotEmpty()) {
-                                        extractedText.append(text)
-                                    } else {
-                                        extractedText.append("[Resource: $uri]")
-                                    }
-                                }
-                            }
-                            else -> {
-                                extractedText.append("[Unknown content type '$contentType': ${contentItem}]")
-                            }
-                        }
-
-                        if (i < contentArray.length() - 1) {
-                            extractedText.append("\n")
-                        }
-                    }
-                    extractedText.toString()
-                } else {
-                    ""
-                }
-
-        // 提取元数据 (resultData 中除了 "content" 之外的所有字段)
-        val metadata = JSONObject()
-        val keys = resultData.keys()
-        while (keys.hasNext()) {
-            val key = keys.next()
-            if (key != "content") {
-                metadata.put(key, resultData.get(key))
-            }
+        val contentText = extractStandardContent(resultData.optJSONArray("content"))
+        if (contentText.isNotEmpty()) {
+            return contentText
         }
 
-        val metadataText = if (metadata.length() > 0) metadata.toString() else ""
+        val structuredText = extractStructuredContent(resultData.opt("structuredContent"))
+        if (structuredText.isNotEmpty()) {
+            return structuredText
+        }
 
-        // 组合元数据和内容
-        return when {
-            metadataText.isNotEmpty() && contentText.isNotEmpty() -> {
-                "$metadataText\n\n$contentText"
+        return resultData.toString()
+    }
+
+    private fun extractStandardContent(contentArray: org.json.JSONArray?): String {
+        if (contentArray == null || contentArray.length() == 0) {
+            return ""
+        }
+
+        val extractedText = StringBuilder()
+        for (i in 0 until contentArray.length()) {
+            val contentItem = contentArray.optJSONObject(i) ?: continue
+            val contentType = contentItem.optString("type", "text")
+
+            when (contentType) {
+                "text" -> {
+                    val text = contentItem.optString("text", "")
+                    extractedText.append(if (isJsonString(text)) formatJson(text) else text)
+                }
+                "image" -> {
+                    val mimeType = contentItem.optString("mimeType", "image/png")
+                    val data = contentItem.optString("data", "")
+                    if (data.isNotEmpty()) {
+                        val imageId = ImagePoolManager.addImageFromBase64(data, mimeType)
+                        if (imageId != "error") {
+                            extractedText.append("<link type=\"image\" id=\"$imageId\"></link>")
+                        } else {
+                            extractedText.append("[Image: $mimeType, Size: ${data.length} bytes]")
+                        }
+                    } else {
+                        extractedText.append("[Image: $mimeType, Size: 0 bytes]")
+                    }
+                }
+                "resource" -> {
+                    val resource = contentItem.optJSONObject("resource")
+                    if (resource != null) {
+                        val uri = resource.optString("uri", "")
+                        val text = resource.optString("text")
+                        val mimeType = resource.optString("mimeType", "")
+                        val blob = resource.optString("blob", "")
+                        val data = if (blob.isNotEmpty()) blob else resource.optString("data", "")
+                        val isImage = mimeType.startsWith("image/") && data.isNotEmpty()
+                        if (isImage) {
+                            val finalMimeType = if (mimeType.isNotEmpty()) mimeType else "image/png"
+                            val imageId = ImagePoolManager.addImageFromBase64(data, finalMimeType)
+                            if (imageId != "error") {
+                                extractedText.append("<link type=\"image\" id=\"$imageId\"></link>")
+                            } else if (text.isNotEmpty()) {
+                                extractedText.append(text)
+                            } else {
+                                extractedText.append("[Resource: $uri]")
+                            }
+                        } else if (text.isNotEmpty()) {
+                            extractedText.append(text)
+                        } else {
+                            extractedText.append("[Resource: $uri]")
+                        }
+                    }
+                }
+                else -> {
+                    extractedText.append("[Unknown content type '$contentType': ${contentItem}]")
+                }
             }
-            metadataText.isNotEmpty() -> metadataText
-            contentText.isNotEmpty() -> contentText
-            else -> resultData.toString() // fallback to original data if both are empty
+
+            if (i < contentArray.length() - 1) {
+                extractedText.append("\n")
+            }
+        }
+        return extractedText.toString()
+    }
+
+    /**
+     * Remote MCP servers may put their payload in structuredContent. Some services place
+     * a JSON document in its result field, so parse that document before selecting text.
+     */
+    private fun extractStructuredContent(value: Any?): String {
+        return when (value) {
+            null, JSONObject.NULL -> ""
+            is JSONObject -> {
+                val nestedResult = value.opt("result")
+                val nestedResultText =
+                    if (nestedResult == null || nestedResult == JSONObject.NULL) "" else extractStructuredContent(nestedResult)
+                val contentText = value.optString("content", "")
+                when {
+                    nestedResultText.isNotEmpty() -> nestedResultText
+                    contentText.isNotEmpty() -> contentText
+                    else -> value.toString()
+                }
+            }
+            is org.json.JSONArray -> value.toString()
+            is String -> {
+                val parsedValue = parseStructuredJson(value)
+                if (parsedValue == null) value else extractStructuredContent(parsedValue)
+            }
+            else -> value.toString()
+        }
+    }
+
+    private fun parseStructuredJson(value: String): Any? {
+        val trimmed = value.trim()
+        return try {
+            when {
+                trimmed.startsWith("{") && trimmed.endsWith("}") -> JSONObject(trimmed)
+                trimmed.startsWith("[") && trimmed.endsWith("]") -> org.json.JSONArray(trimmed)
+                else -> null
+            }
+        } catch (e: Exception) {
+            null
         }
     }
 
@@ -251,8 +276,7 @@ class MCPToolExecutor(private val context: Context, private val mcpManager: MCPM
         val serverName = toolNameParts[0]
         val actualToolName = toolNameParts.subList(1, toolNameParts.size).joinToString(":")
 
-        // 获取MCP桥接客户端
-        val mcpClient = mcpManager.getOrCreateClient(serverName)
+        val mcpClient = mcpManager.getOrCreateSession(serverName)
         if (mcpClient == null) {
             val detailedReason = mcpManager.getLastConnectionFailureReason(serverName)
             return ToolResult(
@@ -290,60 +314,37 @@ class MCPToolExecutor(private val context: Context, private val mcpManager: MCPM
         // 自动类型转换处理
         val convertedParameters = convertParameterTypes(parameters, toolInfo)
 
-        // 调用MCP工具 - 使用同步版本
+        // The synchronous ToolExecutor boundary delegates the actual transport call to a coroutine.
         val result =
                 try {
-                    // 直接调用工具，返回完整的响应（包括 success, result, error）
-                    val response = mcpClient.callToolSync(actualToolName, convertedParameters)
+                    val response = kotlinx.coroutines.runBlocking {
+                        mcpClient.callTool(actualToolName, convertedParameters)
+                    }
 
-                    if (response == null) {
-                        // 如果响应为空（不应该发生，但做个保护）
-                        AppLogger.e(TAG, "MCP工具调用返回空响应: $serverName:$actualToolName")
+                    if (response.success) {
+                        val extractedContent = extractContentFromResult(response.result)
+                        val displayResult =
+                                persistLongResultIfNeeded(
+                                        result = extractedContent,
+                                        serverName = serverName,
+                                        toolName = actualToolName
+                                )
+                        AppLogger.d(TAG, "MCP工具调用成功: $serverName:$actualToolName")
+                        ToolResult(
+                                toolName = tool.name,
+                                success = true,
+                                result = StringResultData(displayResult),
+                                error = null
+                        )
+                    } else {
+                        val errorMessage = response.errorMessage ?: "Tool call failed"
+                        AppLogger.w(TAG, "MCP工具调用失败: $serverName:$actualToolName - $errorMessage")
                         ToolResult(
                                 toolName = tool.name,
                                 success = false,
                                 result = StringResultData(""),
-                                error = "Tool call returned empty response"
+                                error = errorMessage
                         )
-                    } else {
-                        val success = response.optBoolean("success", false)
-                        
-                        if (success) {
-                            // 成功：提取 result 字段并解析 content 数组
-                            val resultData = response.optJSONObject("result")
-                            val extractedContent = extractContentFromResult(resultData)
-                            val displayResult =
-                                    persistLongResultIfNeeded(
-                                            result = extractedContent,
-                                            serverName = serverName,
-                                            toolName = actualToolName
-                                    )
-                            AppLogger.d(TAG, "MCP工具调用成功: $serverName:$actualToolName")
-                            ToolResult(
-                                    toolName = tool.name,
-                                    success = true,
-                                    result = StringResultData(displayResult),
-                                    error = null
-                            )
-                        } else {
-                            // 失败：提取 error 字段
-                            val errorObj = response.optJSONObject("error")
-                            val errorMessage = if (errorObj != null) {
-                                val code = errorObj.optInt("code", -1)
-                                val message = errorObj.optString("message", "Unknown error")
-                                "[$code] $message"
-                            } else {
-                                "Tool call failed but no error message returned"
-                            }
-                            
-                            AppLogger.w(TAG, "MCP工具调用失败: $serverName:$actualToolName - $errorMessage")
-                            ToolResult(
-                                    toolName = tool.name,
-                                    success = false,
-                                    result = StringResultData(""),
-                                    error = errorMessage
-                            )
-                        }
                     }
                 } catch (e: Exception) {
                     val errorMessage = "Exception occurred while calling tool: ${e.message}"
@@ -360,12 +361,12 @@ class MCPToolExecutor(private val context: Context, private val mcpManager: MCPM
     }
 
     /** 尝试获取工具的参数类型信息 */
-    private fun getToolInfo(serverName: String, toolName: String): JSONObject? {
+    private fun getToolInfo(serverName: String, toolName: String): McpRuntimeTool? {
         try {
-            val client = mcpManager.getOrCreateClient(serverName) ?: return null
-            val tools = kotlinx.coroutines.runBlocking { client.getTools() }
+            val client = mcpManager.getOrCreateSession(serverName) ?: return null
+            val tools = kotlinx.coroutines.runBlocking { client.listTools() }
 
-            return tools.find { it.optString("name") == toolName }
+            return tools.find { it.name == toolName }
         } catch (e: Exception) {
             AppLogger.w(TAG, "获取工具信息失败: ${e.message}")
             return null
@@ -380,14 +381,14 @@ class MCPToolExecutor(private val context: Context, private val mcpManager: MCPM
      */
     private fun convertParameterTypes(
             parameters: Map<String, Any>,
-            toolInfo: JSONObject?
+            toolInfo: McpRuntimeTool?
     ): Map<String, Any> {
         val result = mutableMapOf<String, Any>()
 
         parameters.forEach { (name, value) ->
             // 尝试从工具定义中获取参数类型（从 inputSchema.properties 中获取）
             val expectedType =
-                    toolInfo?.optJSONObject("inputSchema")?.optJSONObject("properties")?.let {
+                    toolInfo?.inputSchemaObject()?.optJSONObject("properties")?.let {
                                 properties ->
                         properties.optJSONObject(name)?.optString("type")
                     }
@@ -418,16 +419,49 @@ class MCPToolExecutor(private val context: Context, private val mcpManager: MCPM
             )
         }
 
-        // 这里可以添加更多验证逻辑，但目前简单返回成功
+        findArgumentIntegrityViolation(tool)?.let { violation ->
+            // U+FFFD means the original argument bytes have already been lost. Sending a write
+            // request would silently persist corrupted user content on the remote MCP server.
+            AppLogger.e(
+                    TAG,
+                    "Blocked MCP tool call with corrupted argument: tool=${tool.name}, " +
+                            "parameter=${violation.parameterName}, " +
+                            "replacementCount=${violation.replacementCharacterCount}, " +
+                            "characterOffset=${violation.characterOffset}, " +
+                            "utf8ByteOffset=${violation.utf8ByteOffset}"
+            )
+            return ToolValidationResult(
+                    valid = false,
+                    errorMessage =
+                            "MCP tool argument '${violation.parameterName}' contains " +
+                                    "${violation.replacementCharacterCount} invalid UTF-8 " +
+                                    "replacement character(s) (U+FFFD); the call was blocked " +
+                                    "before it reached the MCP server. First UTF-8 byte offset: " +
+                                    violation.utf8ByteOffset
+            )
+        }
+
         return ToolValidationResult(valid = true)
+    }
+
+    private fun findArgumentIntegrityViolation(tool: AITool): ArgumentIntegrityViolation? {
+        val parameter = tool.parameters.firstOrNull { it.value.contains(REPLACEMENT_CHARACTER) }
+                ?: return null
+        val characterOffset = parameter.value.indexOf(REPLACEMENT_CHARACTER)
+        val utf8ByteOffset = parameter.value
+                .substring(0, characterOffset)
+                .toByteArray(Charsets.UTF_8)
+                .size
+        return ArgumentIntegrityViolation(
+                parameterName = parameter.name,
+                replacementCharacterCount = parameter.value.count { it == REPLACEMENT_CHARACTER },
+                characterOffset = characterOffset,
+                utf8ByteOffset = utf8ByteOffset
+        )
     }
 }
 
-/**
- * MCP管理器
- *
- * 管理MCP客户端的创建和缓存 注意：此版本使用MCPBridgeClient作为底层客户端，替代了原有的MCPClient
- */
+/** Manages transport-neutral MCP runtime sessions and their presentation metadata. */
 class MCPManager(private val context: Context) {
     companion object {
         private const val TAG = "MCPManager"
@@ -442,9 +476,8 @@ class MCPManager(private val context: Context) {
         }
     }
 
-    // 缓存已创建的MCP桥接客户端，避免重复创建
-    private val clientCache =
-            ConcurrentHashMap<String, com.ai.assistance.operit.data.mcp.plugins.MCPBridgeClient>()
+    private val sessionCache = ConcurrentHashMap<String, McpRuntimeSession>()
+    private val runtimeDescriptorCache = ConcurrentHashMap<String, McpRuntimeDescriptor>()
 
     // 缓存服务器配置
     private val serverConfigCache = ConcurrentHashMap<String, MCPServerConfig>()
@@ -473,77 +506,67 @@ class MCPManager(private val context: Context) {
         return connectionFailureReasons[serverName]
     }
 
-    /**
-     * 获取或创建MCP桥接客户端
-     *
-     * @param serverName 服务器名称
-     * @return MCP桥接客户端，如果服务器不存在或无法连接则返回null
-     */
-    fun getOrCreateClient(
-            serverName: String
-    ): com.ai.assistance.operit.data.mcp.plugins.MCPBridgeClient? {
-        // 检查缓存中是否已有客户端
-        val cachedClient = clientCache[serverName]
-        if (cachedClient != null) {
-            // 检查客户端连接状态 - 只做轻量检查，不要过早断开
-            if (cachedClient.isConnected()) {
-                AppLogger.d(TAG, "使用已缓存的客户端: $serverName")
-                return cachedClient
-            } else {
-                // 尝试重新连接现有客户端
-                AppLogger.d(TAG, "尝试重新连接缓存的客户端: $serverName")
-                val reconnected = kotlinx.coroutines.runBlocking { cachedClient.connect() }
-                if (reconnected) {
-                    AppLogger.d(TAG, "成功重新连接到服务: $serverName")
-                    connectionFailureReasons.remove(serverName)
-                    return cachedClient
-                }
-                // 客户端不再可用，从缓存移除
-                connectionFailureReasons[serverName] =
-                        cachedClient.getLastConnectionFailureDetail()
-                                ?: "Reconnect attempt failed, but the client did not report a detailed reason."
-                AppLogger.w(TAG, "无法重新连接到服务: $serverName，将创建新的连接")
-                clientCache.remove(serverName)
+    fun registerRuntime(pluginId: String, descriptor: McpRuntimeDescriptor) {
+        val previous = runtimeDescriptorCache.put(pluginId, descriptor)
+        connectionFailureReasons.remove(pluginId)
+        if (previous != null && previous != descriptor) {
+            sessionCache.remove(pluginId)?.let { oldSession ->
+                kotlinx.coroutines.runBlocking { oldSession.close() }
             }
         }
+    }
 
-        // 获取服务器配置
-        val serverConfig =
-                serverConfigCache[serverName]
-                        ?: run {
-                            connectionFailureReasons[serverName] =
-                                    "Server is not registered in MCPManager. This usually means the runtime registration never happened, was cleared, or the requested server name does not match the registered service name."
-                            return null
-                        }
+    fun getOrCreateSession(pluginId: String): McpRuntimeSession? {
+        val cachedSession = sessionCache[pluginId]
+        if (cachedSession != null) {
+            if (cachedSession.isConnected()) return cachedSession
 
-        try {
-            // 创建新的桥接客户端
-            val client =
-                    com.ai.assistance.operit.data.mcp.plugins.MCPBridgeClient(context, serverName)
+            try {
+                if (kotlinx.coroutines.runBlocking { cachedSession.connect() }) {
+                    connectionFailureReasons.remove(pluginId)
+                    return cachedSession
+                }
+            } catch (e: Exception) {
+                connectionFailureReasons[pluginId] =
+                        "Exception while reconnecting MCP runtime: ${e.message ?: e.javaClass.simpleName}"
+                AppLogger.e(TAG, "重连 MCP runtime 失败: $pluginId", e)
+            }
+            sessionCache.remove(pluginId)
+            kotlinx.coroutines.runBlocking { cachedSession.close() }
+        }
 
-            // 尝试连接 - 带详细日志
-            AppLogger.d(TAG, "正在创建新的连接到服务: $serverName")
-            val connectResult = kotlinx.coroutines.runBlocking { client.connect() }
+        val descriptor = runtimeDescriptorCache[pluginId]
+                ?: run {
+                    connectionFailureReasons[pluginId] =
+                            "MCP runtime is not registered for plugin $pluginId"
+                    return null
+                }
 
-            if (connectResult) {
-                // 连接成功，在会话期间保持此连接
-                AppLogger.d(TAG, "成功连接到服务: $serverName，将在会话期间保持连接")
-                clientCache[serverName] = client
-                connectionFailureReasons.remove(serverName)
-                return client
+        val session = when (descriptor) {
+            is McpRuntimeDescriptor.Local ->
+                com.ai.assistance.operit.data.mcp.plugins.BridgeMcpRuntimeSession(context, descriptor.serviceName)
+            is McpRuntimeDescriptor.Remote ->
+                com.ai.assistance.operit.data.mcp.plugins.RemoteMcpRuntimeSession(pluginId, descriptor)
+        }
+
+        return try {
+            AppLogger.d(TAG, "连接 MCP runtime: $pluginId")
+            if (!kotlinx.coroutines.runBlocking { session.connect() }) {
+                connectionFailureReasons[pluginId] = "MCP runtime connection failed"
+                kotlinx.coroutines.runBlocking { session.close() }
+                null
             } else {
-                connectionFailureReasons[serverName] =
-                        client.getLastConnectionFailureDetail()
-                                ?: "Connection attempt failed, but no detailed reason was reported by the bridge client."
-                AppLogger.w(TAG, "无法连接到服务: $serverName")
+                sessionCache[pluginId] = session
+                connectionFailureReasons.remove(pluginId)
+                session
             }
         } catch (e: Exception) {
-            connectionFailureReasons[serverName] =
-                    "Exception while creating bridge client: ${e.message ?: e.javaClass.simpleName}"
-            AppLogger.e(TAG, "创建桥接客户端时出错: ${e.message}", e)
+            connectionFailureReasons[pluginId] =
+                    "Exception while creating MCP runtime: ${e.message ?: e.javaClass.simpleName}"
+            AppLogger.e(TAG, "创建 MCP runtime 失败: $pluginId", e)
+            kotlinx.coroutines.runBlocking { session.close() }
+            null
         }
-
-        return null
     }
 
     /**
@@ -552,16 +575,13 @@ class MCPManager(private val context: Context) {
      * @param serverName 服务器名称
      * @param serverConfig 服务器配置
      */
-    fun registerServer(serverName: String, serverConfig: MCPServerConfig) {
-        serverConfigCache[serverName] = serverConfig
-        connectionFailureReasons.remove(serverName)
-
-        // 如果已有缓存的客户端，需要更新或移除
-        if (clientCache.containsKey(serverName)) {
-            // 移除旧客户端，下次需要时会重新创建
-            val oldClient = clientCache.remove(serverName)
-            oldClient?.disconnect()
-        }
+    fun registerServer(
+            pluginId: String,
+            serverConfig: MCPServerConfig,
+            descriptor: McpRuntimeDescriptor
+    ) {
+        serverConfigCache[pluginId] = serverConfig
+        registerRuntime(pluginId, descriptor)
     }
 
     /**
@@ -571,35 +591,20 @@ class MCPManager(private val context: Context) {
      */
     fun unregisterServer(serverName: String) {
         serverConfigCache.remove(serverName)
+        runtimeDescriptorCache.remove(serverName)
         connectionFailureReasons.remove(serverName)
-
-        // 关闭并移除对应客户端缓存
-        val oldClient = clientCache.remove(serverName)
-        oldClient?.disconnect()
-    }
-
-    /**
-     * 注册MCP服务器（简化版）
-     *
-     * @param serverName 服务器名称
-     * @param endpoint 服务器端点URL
-     * @param description 服务器描述
-     */
-    fun registerServer(serverName: String, endpoint: String, description: String = "") {
-        val serverConfig =
-                MCPServerConfig(
-                        name = serverName,
-                        endpoint = endpoint,
-                        description = description,
-                        capabilities = listOf("tools"),
-                        extraData = emptyMap()
-                )
-        registerServer(serverName, serverConfig)
+        sessionCache.remove(serverName)?.let { session ->
+            kotlinx.coroutines.runBlocking { session.close() }
+        }
     }
 
     /** 关闭所有MCP客户端连接 */
     fun shutdown() {
-        clientCache.values.forEach { it.disconnect() }
-        clientCache.clear()
+        sessionCache.values.forEach { session ->
+            kotlinx.coroutines.runBlocking { session.close() }
+        }
+        sessionCache.clear()
+        runtimeDescriptorCache.clear()
+        serverConfigCache.clear()
     }
 }

@@ -4,8 +4,10 @@ import android.content.Context
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
+import android.util.AtomicFile
 import com.ai.assistance.operit.data.db.AppDatabase
 import com.ai.assistance.operit.data.db.ObjectBoxManager
+import com.ai.assistance.operit.data.stats.TokenUsageRepository
 import com.ai.assistance.operit.util.AppLogger
 import com.ai.assistance.operit.util.OperitPaths
 import java.io.BufferedInputStream
@@ -21,19 +23,21 @@ import java.util.zip.ZipInputStream
 import java.util.zip.ZipOutputStream
 import kotlin.system.measureTimeMillis
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
+private const val SNAPSHOT_PACKAGE_NAME_PREFIX = "com.ai.assistance.operit"
+
+internal fun isSupportedSnapshotPackageName(packageName: String): Boolean =
+    packageName.startsWith(SNAPSHOT_PACKAGE_NAME_PREFIX)
+
 object RawSnapshotBackupManager {
 
     private const val TAG = "RawSnapshotBackup"
     private const val FORMAT_VERSION = 1
-
     private const val ZIP_PREFIX = "operit_raw_snapshot_"
 
     private const val ENTRY_MANIFEST = "manifest.json"
@@ -47,7 +51,6 @@ object RawSnapshotBackupManager {
 
     private val terminalTopLevelDirNames = setOf("usr", "tmp", "bin")
 
-    private val mutex = Mutex()
     private val mainHandler = Handler(Looper.getMainLooper())
 
     @Serializable
@@ -104,7 +107,7 @@ object RawSnapshotBackupManager {
         options: SnapshotOptions = SnapshotOptions(),
         onProgress: ((ExportProgressInfo) -> Unit)? = null
     ): File = withContext(Dispatchers.IO) {
-        mutex.withLock {
+        TokenUsageRepository.withDatabaseAccess {
             AppLogger.i(TAG, "export start (includeTerminalData=${options.includeTerminalData})")
             withContext(Dispatchers.Main) { onProgress?.invoke(ExportProgressInfo(ExportProgress.PREPARING)) }
             val exportDir = OperitBackupDirs.rawSnapshotDir()
@@ -262,7 +265,7 @@ object RawSnapshotBackupManager {
         uri: Uri,
         onProgress: ((RestoreProgress) -> Unit)? = null
     ) = withContext(Dispatchers.IO) {
-        mutex.withLock {
+        TokenUsageRepository.withDatabaseRestore {
             val cacheZip = File.createTempFile("raw_snapshot_restore_", ".zip", context.cacheDir)
             val workDir = File(context.cacheDir, "raw_snapshot_restore_work").apply {
                 if (exists()) deleteRecursively()
@@ -287,7 +290,7 @@ object RawSnapshotBackupManager {
                 AppLogger.i(TAG, "restore closed databases (room + objectbox)")
 
                 withContext(Dispatchers.Main) { onProgress?.invoke(RestoreProgress.EXTRACTING) }
-                val manifest = extractZipToWorkDir(cacheZip, workDir, expectedPackageName = context.packageName)
+                val manifest = extractZipToWorkDir(cacheZip, workDir)
 
                 val payloadDir = File(workDir, "payload")
                 val externalFilesPayloadDir = File(payloadDir, "external_files")
@@ -342,7 +345,7 @@ object RawSnapshotBackupManager {
         }
     }
 
-    private fun extractZipToWorkDir(zipFile: File, workDir: File, expectedPackageName: String): Manifest {
+    private fun extractZipToWorkDir(zipFile: File, workDir: File): Manifest {
         val payloadRoot = File(workDir, "payload")
         payloadRoot.mkdirs()
 
@@ -406,7 +409,7 @@ object RawSnapshotBackupManager {
             throw IllegalArgumentException("Unsupported backup version: ${manifest.formatVersion}")
         }
 
-        if (manifest.packageName != expectedPackageName) {
+        if (!isSupportedSnapshotPackageName(manifest.packageName)) {
             throw IllegalArgumentException("Backup package mismatch: ${manifest.packageName}")
         }
 
@@ -578,10 +581,17 @@ object RawSnapshotBackupManager {
             toDir.mkdirs()
         }
 
-        if (!fromDir.exists() || !fromDir.isDirectory) return
+        // A raw snapshot is a complete restore point. Keeping entries that are absent from the
+        // snapshot leaves newer migration markers behind and changes how restored data is read.
+        toDir.listFiles()?.forEach { existing ->
+            if (!preservedTopLevelDirNames.contains(existing.name)) {
+                check(existing.deleteRecursively()) {
+                    "Failed to remove stale snapshot entry: ${existing.absolutePath}"
+                }
+            }
+        }
 
-        // Non-destructive restore: only overwrite files present in the backup.
-        // Files not present in the backup are preserved.
+        if (!fromDir.exists() || !fromDir.isDirectory) return
         copyDir(fromDir, toDir, preservedTopLevelDirNames)
     }
 
@@ -613,10 +623,17 @@ object RawSnapshotBackupManager {
                 target.mkdirs()
             } else if (canonical.isFile) {
                 target.parentFile?.mkdirs()
-                canonical.inputStream().use { input ->
-                    target.outputStream().use { output ->
-                        input.copyTo(output)
-                    }
+                // DataStore observes this directory. Replacing an active preferences file by
+                // truncating it exposes a transient empty payload that can be persisted again.
+                val atomicFile = AtomicFile(target)
+                var output: FileOutputStream? = null
+                try {
+                    output = atomicFile.startWrite()
+                    canonical.inputStream().use { input -> input.copyTo(output) }
+                    atomicFile.finishWrite(output)
+                } catch (error: Throwable) {
+                    output?.let(atomicFile::failWrite)
+                    throw error
                 }
             }
         }

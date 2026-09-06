@@ -65,6 +65,7 @@ object ModelListFetcher {
         val modelsUrl =
                 when (apiProviderType) {
                     ApiProviderType.OPENAI,
+                    ApiProviderType.XAI,
                     ApiProviderType.OPENAI_RESPONSES,
                     ApiProviderType.OPENAI_RESPONSES_GENERIC,
                     ApiProviderType.OPENAI_GENERIC,
@@ -105,6 +106,7 @@ object ModelListFetcher {
                     ApiProviderType.ZHIPU -> "${extractBaseUrl(apiEndpoint)}/v4/models"
                     ApiProviderType.DEEPSEEK -> "${extractBaseUrl(apiEndpoint)}/v1/models"
                     ApiProviderType.OPENROUTER -> "${extractBaseUrl(apiEndpoint)}/v1/models"
+                    ApiProviderType.OPENCODE -> OpenCodeRouting.modelsEndpoint(apiEndpoint)
                     ApiProviderType.FOUR_ROUTER -> "${extractBaseUrl(apiEndpoint)}/v1/models"
                     ApiProviderType.NOUS_PORTAL -> "${extractBaseUrl(apiEndpoint)}/v1/models"
                     ApiProviderType.MOONSHOT -> "${extractBaseUrl(apiEndpoint)}/v1/models"
@@ -293,7 +295,7 @@ object ModelListFetcher {
                         val errorBody = response.body?.string() ?: context.getString(R.string.model_fetch_no_error_details)
                         val responseCode = response.code
                         response.close()
-                        if ((apiProviderType == ApiProviderType.OPENAI || apiProviderType == ApiProviderType.OPENAI_RESPONSES || apiProviderType == ApiProviderType.OPENAI_RESPONSES_GENERIC || apiProviderType == ApiProviderType.OPENAI_GENERIC || apiProviderType == ApiProviderType.OPENAI_LOCAL || apiProviderType == ApiProviderType.IFLOW || apiProviderType == ApiProviderType.NVIDIA || apiProviderType == ApiProviderType.LMSTUDIO || apiProviderType == ApiProviderType.OLLAMA || apiProviderType == ApiProviderType.FOUR_ROUTER || apiProviderType == ApiProviderType.NOUS_PORTAL || apiProviderType == ApiProviderType.MIMO) &&
+                        if ((apiProviderType == ApiProviderType.OPENAI || apiProviderType == ApiProviderType.XAI || apiProviderType == ApiProviderType.OPENAI_RESPONSES || apiProviderType == ApiProviderType.OPENAI_RESPONSES_GENERIC || apiProviderType == ApiProviderType.OPENAI_GENERIC || apiProviderType == ApiProviderType.OPENAI_LOCAL || apiProviderType == ApiProviderType.IFLOW || apiProviderType == ApiProviderType.NVIDIA || apiProviderType == ApiProviderType.LMSTUDIO || apiProviderType == ApiProviderType.OLLAMA || apiProviderType == ApiProviderType.FOUR_ROUTER || apiProviderType == ApiProviderType.NOUS_PORTAL || apiProviderType == ApiProviderType.MIMO) &&
                                         modelsUrl.endsWith("/v1/models")) {
                             val fallbackUrl = modelsUrl.removeSuffix("/v1/models") + "/models"
                             AppLogger.w(TAG, "API请求失败，尝试兼容路径: $fallbackUrl")
@@ -345,6 +347,7 @@ object ModelListFetcher {
                             try {
                                 when (apiProviderType) {
                                     ApiProviderType.OPENAI,
+                                    ApiProviderType.XAI,
                                     ApiProviderType.OPENAI_RESPONSES,
                                     ApiProviderType.OPENAI_RESPONSES_GENERIC,
                                     ApiProviderType.OPENAI_GENERIC,
@@ -357,8 +360,9 @@ object ModelListFetcher {
                                     ApiProviderType.DOUBAO,
                                     ApiProviderType.NVIDIA,
                                     ApiProviderType.BAICHUAN,
-                                    ApiProviderType.OPENROUTER,
-                                    ApiProviderType.FOUR_ROUTER,
+                                     ApiProviderType.OPENROUTER,
+                                     ApiProviderType.OPENCODE,
+                                     ApiProviderType.FOUR_ROUTER,
                                     ApiProviderType.NOUS_PORTAL,
                                     ApiProviderType.INFINIAI,
                                     ApiProviderType.ALIPAY_BAILING,

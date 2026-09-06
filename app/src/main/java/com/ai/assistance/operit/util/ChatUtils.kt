@@ -31,15 +31,28 @@ object ChatUtils {
         }
     }
 
+    fun stripOpenAiResponsesProtocolMeta(content: String): String {
+        return ChatMarkupRegex.removeOpenAiResponsesProtocolMeta(content)
+    }
+
+    fun stripOpenAiResponsesProtocolMarkup(content: String): String {
+        return stripOpenAiResponsesProtocolMeta(content)
+            .replace(ChatMarkupRegex.searchTag, "")
+            .replace(ChatMarkupRegex.searchSelfClosingTag, "")
+            .trim()
+    }
+
+    fun stripOpenAiResponsesProtocolMarkupTurns(messages: List<PromptTurn>): List<PromptTurn> {
+        return messages.map { turn ->
+            turn.withContent(stripOpenAiResponsesProtocolMarkup(turn.content))
+        }
+    }
+
     fun isGeminiProviderModel(providerModel: String): Boolean {
         return when (providerModel.substringBefore(":").uppercase()) {
             "GOOGLE", "GEMINI_GENERIC" -> true
             else -> false
         }
-    }
-
-    fun isOpenAIResponsesProviderModel(providerModel: String): Boolean {
-        return providerModel.substringBefore(":").uppercase() == "OPENAI_RESPONSES"
     }
 
     /** 过滤掉内容中的思考部分和搜索来源 移除<think></think>、<thinking></thinking>和<search></search>标签及其中的内容，并处理未闭合的情况 */
@@ -54,7 +67,8 @@ object ChatUtils {
         // 6. <search>... (未闭合，直到字符串末尾)
         // \\z 匹配字符串的绝对末尾
         val thinkPattern = "<think(?:ing)?>.*?(</think(?:ing)?>|\\z)".toRegex(RegexOption.DOT_MATCHES_ALL)
-        val searchPattern = "<search>.*?(</search>|\\z)".toRegex(RegexOption.DOT_MATCHES_ALL)
+        val searchPattern = "<search\\b[\\s\\S]*?(</search>|\\z)"
+            .toRegex(setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
         return content.replace(thinkPattern, "").replace(searchPattern, "").trim()
     }
 
@@ -73,7 +87,11 @@ object ChatUtils {
         // 移除think标签和search标签
         val contentWithoutThink = content
             .replace(thinkPattern, "")
-            .replace("<search>.*?(</search>|\\z)".toRegex(RegexOption.DOT_MATCHES_ALL), "")
+            .replace(
+                "<search\\b[\\s\\S]*?(</search>|\\z)"
+                    .toRegex(setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL)),
+                ""
+            )
             .trim()
         
         return Pair(contentWithoutThink, thinkingContent)
@@ -84,11 +102,11 @@ object ChatUtils {
      * @param text 要估算token的文本
      * @return 估算的token数量
      */
-    fun estimateTokenCount(text: String): Int {
+    fun estimateTokenCount(text: String): Long {
         // 简单估算：中文每个字约1.5个token，英文每4个字符约1个token
         val chineseCharCount = text.count { it.code in 0x4E00..0x9FFF }
         val otherCharCount = text.length - chineseCharCount
-        return (chineseCharCount * 1.5 + otherCharCount * 0.25).toInt()
+        return (chineseCharCount * 1.5 + otherCharCount * 0.25).toLong()
     }
 
     /**

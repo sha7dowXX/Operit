@@ -237,11 +237,11 @@ fun registerAllTools(handler: AIToolHandler, context: Context) {
             )
         }
 
-        val hasPermission = runBlocking {
+        val permissionResult = runBlocking {
             handler.getToolPermissionSystem().checkToolPermission(proxiedTool)
         }
-        if (!hasPermission) {
-            val errorMessage = "User cancelled the tool execution."
+        if (!permissionResult.isGranted) {
+            val errorMessage = context.getString(requireNotNull(permissionResult.errorMessageResId))
             handler.notifyToolPermissionChecked(
                 proxiedTool,
                 granted = false,
@@ -699,6 +699,111 @@ fun registerAllTools(handler: AIToolHandler, context: Context) {
             }
     )
 
+    handler.registerTool(
+            name = "list_character_cards_settings",
+            descriptionGenerator = { _ ->
+                "List full character card settings and the active character card"
+            },
+            executor = { tool ->
+                val softwareSettingsTools = ToolGetter.getSoftwareSettingsModifyTools(context)
+                runBlocking(Dispatchers.IO) { softwareSettingsTools.listCharacterCards(tool) }
+            }
+    )
+
+    handler.registerTool(
+            name = "get_character_card",
+            descriptionGenerator = { tool ->
+                val characterCardId = tool.parameters.find { it.name == "character_card_id" }?.value ?: ""
+                "Get character card settings: $characterCardId"
+            },
+            executor = { tool ->
+                val softwareSettingsTools = ToolGetter.getSoftwareSettingsModifyTools(context)
+                runBlocking(Dispatchers.IO) { softwareSettingsTools.getCharacterCard(tool) }
+            }
+    )
+
+    handler.registerTool(
+            name = "create_character_card",
+            descriptionGenerator = { tool ->
+                val name = tool.parameters.find { it.name == "name" }?.value ?: ""
+                "Create character card: $name"
+            },
+            executor = { tool ->
+                val softwareSettingsTools = ToolGetter.getSoftwareSettingsModifyTools(context)
+                runBlocking(Dispatchers.IO) { softwareSettingsTools.createCharacterCard(tool) }
+            }
+    )
+
+    handler.registerTool(
+            name = "update_character_card",
+            descriptionGenerator = { tool ->
+                val characterCardId = tool.parameters.find { it.name == "character_card_id" }?.value ?: ""
+                "Update character card: $characterCardId"
+            },
+            executor = { tool ->
+                val softwareSettingsTools = ToolGetter.getSoftwareSettingsModifyTools(context)
+                runBlocking(Dispatchers.IO) { softwareSettingsTools.updateCharacterCard(tool) }
+            }
+    )
+
+    handler.registerTool(
+            name = "delete_character_card",
+            descriptionGenerator = { tool ->
+                val characterCardId = tool.parameters.find { it.name == "character_card_id" }?.value ?: ""
+                "Delete character card: $characterCardId"
+            },
+            executor = { tool ->
+                val softwareSettingsTools = ToolGetter.getSoftwareSettingsModifyTools(context)
+                runBlocking(Dispatchers.IO) { softwareSettingsTools.deleteCharacterCard(tool) }
+            }
+    )
+
+    handler.registerTool(
+            name = "set_active_character_card",
+            descriptionGenerator = { tool ->
+                val characterCardId = tool.parameters.find { it.name == "character_card_id" }?.value ?: ""
+                "Set active character card: $characterCardId"
+            },
+            executor = { tool ->
+                val softwareSettingsTools = ToolGetter.getSoftwareSettingsModifyTools(context)
+                runBlocking(Dispatchers.IO) { softwareSettingsTools.setActiveCharacterCard(tool) }
+            }
+    )
+
+    handler.registerTool(
+            name = "clear_active_character_card",
+            descriptionGenerator = { _ -> "Clear the active character card" },
+            executor = { tool ->
+                val softwareSettingsTools = ToolGetter.getSoftwareSettingsModifyTools(context)
+                runBlocking(Dispatchers.IO) { softwareSettingsTools.clearActiveCharacterCard(tool) }
+            }
+    )
+
+    handler.registerTool(
+            name = "import_character_card_from_tavern_json",
+            descriptionGenerator = { _ -> "Import one character card from Tavern JSON" },
+            executor = { tool ->
+                val softwareSettingsTools = ToolGetter.getSoftwareSettingsModifyTools(context)
+                runBlocking(Dispatchers.IO) {
+                    softwareSettingsTools.importCharacterCardFromTavernJson(tool)
+                }
+            }
+    )
+
+    handler.registerTool(
+            name = "export_character_card_to_tavern_json",
+            descriptionGenerator = { tool ->
+                val characterCardId = tool.parameters.find { it.name == "character_card_id" }?.value ?: ""
+                "Export character card to Tavern JSON: $characterCardId"
+            },
+            executor = { tool ->
+                val softwareSettingsTools = ToolGetter.getSoftwareSettingsModifyTools(context)
+                runBlocking(Dispatchers.IO) {
+                    softwareSettingsTools.exportCharacterCardToTavernJson(tool)
+                }
+            }
+    )
+
     // 注册记忆库查询工具
     handler.registerTool(
             name = "query_memory",
@@ -725,8 +830,8 @@ fun registerAllTools(handler: AIToolHandler, context: Context) {
             }
     )
 
-    // Register the document-level profile update. The normal tool confirmation UI is the safety
-    // boundary; unlike the released analyzer, no background process may rewrite user.md.
+    // Register the document-level profile update. The normal tool confirmation UI protects
+    // explicit writes; automatic writes separately honor the active memory space policy.
     handler.registerTool(
             name = "update_user_profile",
             descriptionGenerator = { tool ->
@@ -1617,6 +1722,15 @@ fun registerAllTools(handler: AIToolHandler, context: Context) {
                             return chatManagerTool.sendMessageToAIStream(tool)
                         }
                     }
+    )
+
+    handler.registerTool(
+            name = "call_chat_model",
+            descriptionGenerator = { tool ->
+                val functionType = tool.parameters.find { it.name == "function_type" }?.value ?: ""
+                s(R.string.toolreg_call_chat_model_desc, functionType)
+            },
+            executor = { tool -> runBlocking(Dispatchers.IO) { chatManagerTool.callChatModel(tool) } }
     )
 
     // 列出所有角色卡

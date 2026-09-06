@@ -23,13 +23,6 @@ import java.util.Base64
 import java.util.concurrent.TimeUnit
 
 @Serializable
-data class GitHubAccessTokenResponse(
-    val access_token: String,
-    val token_type: String,
-    val scope: String? = null
-)
-
-@Serializable
 data class GitHubRepository(
     val id: Long,
     val name: String,
@@ -105,7 +98,7 @@ data class GitHubRelease(
     val body: String?,
     val html_url: String,
     val upload_url: String? = null,
-    val published_at: String,
+    val published_at: String? = null,
     val created_at: String,
     val prerelease: Boolean = false,
     val draft: Boolean = false,
@@ -124,7 +117,7 @@ data class GitHubReleaseAsset(
 
 /**
  * GitHub API服务类
- * 提供GitHub OAuth认证、用户信息、仓库操作等功能
+ * 提供GitHub用户信息、仓库操作等功能
  */
 class GitHubApiService(private val context: Context) {
     
@@ -154,49 +147,7 @@ class GitHubApiService(private val context: Context) {
     companion object {
         private const val TAG = "GitHubApiService"
         private const val GITHUB_API_BASE = "https://api.github.com"
-        private const val GITHUB_OAUTH_BASE = "https://github.com/login/oauth"
     }
-    
-    /**
-     * 通过授权码获取访问令牌
-     */
-    suspend fun getAccessToken(code: String): Result<GitHubAccessTokenResponse> = withContext(Dispatchers.IO) {
-        try {
-            // GitHub OAuth API 要求使用 application/x-www-form-urlencoded 格式
-            val formBody = FormBody.Builder()
-                .add("client_id", GitHubAuthPreferences.GITHUB_CLIENT_ID)
-                .add("client_secret", GitHubAuthPreferences.GITHUB_CLIENT_SECRET)
-                .add("code", code)
-                .build()
-            
-            val request = Request.Builder()
-                .url("$GITHUB_OAUTH_BASE/access_token")
-                .post(formBody)
-                .addHeader("Accept", "application/json")
-                .build()
-            
-            val response = client.newCall(request).execute()
-            val responseBody = response.body?.string()
-            
-            if (response.isSuccessful && responseBody != null) {
-                try {
-                    val tokenResponse = json.decodeFromString<GitHubAccessTokenResponse>(responseBody)
-                    Result.success(tokenResponse)
-                } catch (e: Exception) {
-                    com.ai.assistance.operit.util.AppLogger.e("GitHubApiService", "Failed to parse token response", e)
-                    Result.failure(Exception("Failed to parse token response: ${e.message}"))
-                }
-            } else {
-                val errorMsg = "HTTP ${response.code}: ${response.message}"
-                com.ai.assistance.operit.util.AppLogger.e("GitHubApiService", errorMsg)
-                Result.failure(Exception(errorMsg))
-            }
-        } catch (e: Exception) {
-            com.ai.assistance.operit.util.AppLogger.e("GitHubApiService", "Exception in getAccessToken", e)
-            Result.failure(e)
-        }
-    }
-    
     /**
      * 获取当前用户信息
      */
@@ -729,6 +680,26 @@ class GitHubApiService(private val context: Context) {
                 Result.success(json.decodeFromString(GitHubRelease.serializer(), responseBody))
             } else {
                 Result.failure(buildHttpException(response.code, response.message, responseBody))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun downloadReleaseAsset(downloadUrl: String): Result<ByteArray> = withContext(Dispatchers.IO) {
+        try {
+            val requestBuilder = Request.Builder().url(downloadUrl)
+            authPreferences.getAuthorizationHeader()?.let { authHeader ->
+                requestBuilder.addHeader("Authorization", authHeader)
+            }
+
+            client.newCall(requestBuilder.build()).execute().use { response ->
+                val responseBody = response.body
+                if (response.isSuccessful && responseBody != null) {
+                    Result.success(responseBody.bytes())
+                } else {
+                    Result.failure(Exception("HTTP ${response.code}: ${response.message}"))
+                }
             }
         } catch (e: Exception) {
             Result.failure(e)

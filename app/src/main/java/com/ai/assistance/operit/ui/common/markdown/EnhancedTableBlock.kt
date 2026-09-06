@@ -2,14 +2,19 @@ package com.ai.assistance.operit.ui.common.markdown
 
 import android.graphics.Typeface
 import android.os.SystemClock
+import android.text.Spanned
 import android.text.StaticLayout
 import android.text.TextPaint
+import android.text.style.URLSpan
+import android.view.ViewConfiguration
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
@@ -29,9 +34,12 @@ import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.PointerInputChange
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFontFamilyResolver
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -60,7 +68,8 @@ private const val TABLE_FLING_DECAY_RATE = 4.5f
 private const val TABLE_MIN_FLING_VELOCITY = 120f
 private const val TABLE_MAX_FLING_VELOCITY = 9000f
 
-private data class TableData(
+/** 供表格渲染和复制为纯文本共用的表格解析结果。 */
+internal data class TableData(
     val rows: List<List<String>>,
     val hasHeader: Boolean
 )
@@ -87,12 +96,17 @@ private data class TableRenderLayout(
 fun EnhancedTableBlock(
     tableContent: String,
     modifier: Modifier = Modifier,
-    textColor: Color = MaterialTheme.colorScheme.onSurface
+    textColor: Color = MaterialTheme.colorScheme.onSurface,
+    onLinkClick: ((String) -> Unit)? = null,
 ) {
     val density = LocalDensity.current
+    val hostView = LocalView.current
+    val touchSlop =
+        remember(hostView) {
+            ViewConfiguration.get(hostView.context).scaledTouchSlop.toFloat()
+        }
     val typography = MaterialTheme.typography
     val textLayoutSettings = LocalAiMarkdownTextLayoutSettings.current
-    val coroutineScope = rememberCoroutineScope()
     val fontFamily = typography.bodyMedium.fontFamily
     val resolver = LocalFontFamilyResolver.current
     val normalTypeface = remember(resolver, fontFamily) {
@@ -108,10 +122,12 @@ fun EnhancedTableBlock(
 
     if (tableData.rows.isEmpty()) return
 
-    var scrollOffsetPx by remember(tableContent) { mutableStateOf(0f) }
-    var dragVelocityPxPerSec by remember(tableContent) { mutableStateOf(0f) }
-    var lastDragEventTimeMs by remember(tableContent) { mutableStateOf(0L) }
-    var flingJob by remember(tableContent) { mutableStateOf<Job?>(null) }
+    val coroutineScope = rememberCoroutineScope()
+    // Streaming appends change tableContent repeatedly; the surrounding node identity scopes this state.
+    var scrollOffsetPx by remember { mutableStateOf(0f) }
+    var dragVelocityPxPerSec by remember { mutableStateOf(0f) }
+    var lastDragEventTimeMs by remember { mutableStateOf(0L) }
+    var flingJob by remember { mutableStateOf<Job?>(null) }
     val tableBlockDesc = stringResource(R.string.table_block)
     val borderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
     val headerBackground = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
@@ -244,6 +260,98 @@ fun EnhancedTableBlock(
                                 }
                             lastDragEventTimeMs = nowMs
                             scrollOffsetPx = (scrollOffsetPx - dragAmount).coerceIn(0f, maxScrollPx)
+                        }
+                    }
+                    .pointerInput(renderLayout, onLinkClick, scrollOffsetPx, touchSlop) {
+                        if (onLinkClick == null) return@pointerInput
+                        awaitEachGesture {
+                            val down =
+                                awaitFirstDown(
+                                    requireUnconsumed = false,
+                                    pass = PointerEventPass.Initial,
+                                )
+                            val pointerId = down.id
+                            val downPosition = down.position
+                            var exceededTouchSlop = false
+                            var cancelled = false
+                            var releaseChange: PointerInputChange? = null
+
+                            while (true) {
+                                val event = awaitPointerEvent(PointerEventPass.Final)
+                                if (event.changes.any { it.id != pointerId && it.pressed }) {
+                                    cancelled = true
+                                }
+                                val change = event.changes.firstOrNull { it.id == pointerId }
+                                if (change == null) {
+                                    cancelled = true
+                                    break
+                                }
+                                if ((change.position - downPosition).getDistance() > touchSlop) {
+                                    exceededTouchSlop = true
+                                }
+                                if (change.isConsumed && change.pressed) {
+                                    cancelled = true
+                                }
+                                if (!change.pressed) {
+                                    releaseChange = change
+                                    break
+                                }
+                            }
+
+                            val up = releaseChange
+                            if (cancelled || exceededTouchSlop || up == null) {
+                                return@awaitEachGesture
+                            }
+                            val upPosition = up.position
+
+                            var clickedLink = false
+                            var cellY = 0f
+                            outer@ for (rowIndex in renderLayout.cells.indices) {
+                                var cellX = 0f
+                                for (colIndex in renderLayout.cells[rowIndex].indices) {
+                                    val screenX = cellX - scrollOffsetPx
+                                    val cellWidth = renderLayout.columnWidthsPx[colIndex].toFloat()
+                                    val cellHeight = renderLayout.rowHeightsPx[rowIndex].toFloat()
+                                    if (
+                                        upPosition.x >= screenX &&
+                                        upPosition.x <= screenX + cellWidth &&
+                                        upPosition.y >= cellY &&
+                                        upPosition.y <= cellY + cellHeight
+                                    ) {
+                                        val cell = renderLayout.cells[rowIndex][colIndex]
+                                        val text = cell.layout.text
+                                        if (text is Spanned) {
+                                            val relativeX =
+                                                upPosition.x - screenX - cellHorizontalPaddingPx
+                                            val relativeY =
+                                                upPosition.y - cellY - cellVerticalPaddingPx
+                                            if (
+                                                relativeX >= 0f &&
+                                                relativeX <= cell.layout.width.toFloat() &&
+                                                relativeY >= 0f &&
+                                                relativeY < cell.layout.height.toFloat()
+                                            ) {
+                                                val line =
+                                                    cell.layout.getLineForVertical(relativeY.toInt())
+                                                val offset =
+                                                    cell.layout.getOffsetForHorizontal(line, relativeX)
+                                                val spans =
+                                                    text.getSpans(offset, offset, URLSpan::class.java)
+                                                spans.firstOrNull()?.let { span ->
+                                                    onLinkClick(span.url)
+                                                    clickedLink = true
+                                                }
+                                            }
+                                        }
+                                        break@outer
+                                    }
+                                    cellX += cellWidth
+                                }
+                                cellY += renderLayout.rowHeightsPx[rowIndex]
+                            }
+                            if (clickedLink) {
+                                up.consume()
+                            }
                         }
                     }
         ) {
@@ -511,7 +619,8 @@ private fun calculateLetterSpacingEm(fontSizeSp: Float, letterSpacingSp: Float):
     return letterSpacingSp / fontSizeSp
 }
 
-private fun parseTable(content: String): TableData {
+/** 将原始 Markdown 表格文本解析成行列结构，供渲染和复制为纯文本共用。 */
+internal fun parseTable(content: String): TableData {
     fun isHeaderSeparatorLine(line: String): Boolean {
         return line.trim().matches(
             Regex("^\\s*\\|?\\s*[-:]+\\s*(\\|\\s*[-:]+\\s*)+\\|?\\s*$")

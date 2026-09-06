@@ -182,7 +182,10 @@ fun ModelPromptsSettingsScreen(
                     editingCharacterCard?.let { card ->
                         val internalUri = FileUtils.copyFileToInternalStorage(context, croppedUri, "avatar_${card.id}")
                         if (internalUri != null) {
-                            userPreferencesManager.saveAiAvatarForCharacterCard(card.id, internalUri.toString())
+                            activePromptManager.saveAiAvatarForPrompt(
+                                ActivePrompt.CharacterCard(card.id),
+                                internalUri.toString(),
+                            )
                             Toast.makeText(context, context.getString(R.string.avatar_updated), Toast.LENGTH_SHORT).show()
                             refreshTrigger++
                         } else {
@@ -204,7 +207,10 @@ fun ModelPromptsSettingsScreen(
                     editingGroupCard?.let { group ->
                         val internalUri = FileUtils.copyFileToInternalStorage(context, croppedUri, "group_avatar_${group.id}")
                         if (internalUri != null) {
-                            userPreferencesManager.saveAiAvatarForCharacterGroup(group.id, internalUri.toString())
+                            activePromptManager.saveAiAvatarForPrompt(
+                                ActivePrompt.CharacterGroup(group.id),
+                                internalUri.toString(),
+                            )
                             Toast.makeText(context, context.getString(R.string.avatar_updated), Toast.LENGTH_SHORT).show()
                             refreshTrigger++
                         } else {
@@ -282,7 +288,10 @@ fun ModelPromptsSettingsScreen(
         runCatching {
             val internalUri = FileUtils.copyFileToInternalStorage(context, fileUri, "avatar_${characterCardId}")
                 ?: throw IllegalStateException(context.getString(R.string.theme_copy_failed))
-            userPreferencesManager.saveAiAvatarForCharacterCard(characterCardId, internalUri.toString())
+            activePromptManager.saveAiAvatarForPrompt(
+                ActivePrompt.CharacterCard(characterCardId),
+                internalUri.toString(),
+            )
         }.onFailure { error ->
             AppLogger.w(
                 "ModelPromptsSettingsScreen",
@@ -582,12 +591,6 @@ fun ModelPromptsSettingsScreen(
     var deletingTagId by remember { mutableStateOf("") }
     var deletingTagName by remember { mutableStateOf("") }
 
-    // 初始化
-    LaunchedEffect(Unit) {
-        characterCardManager.initializeIfNeeded()
-        characterGroupCardManager.initializeIfNeeded()
-    }
-
     // 获取所有角色卡
     var allCharacterCards by remember { mutableStateOf(emptyList<CharacterCard>()) }
     LaunchedEffect(characterCardList, refreshTrigger) {
@@ -610,10 +613,16 @@ fun ModelPromptsSettingsScreen(
             scope.launch {
                 if (!isExistingCard) {
                     val newCardId = characterCardManager.createCharacterCard(card)
-                    userPreferencesManager.saveCustomChatTitleForCharacterCard(newCardId, card.name.ifEmpty { null })
+                    activePromptManager.saveCustomChatTitleForPrompt(
+                        ActivePrompt.CharacterCard(newCardId),
+                        card.name.ifEmpty { null },
+                    )
                 } else {
                     characterCardManager.updateCharacterCard(card)
-                    userPreferencesManager.saveCustomChatTitleForCharacterCard(card.id, card.name.ifEmpty { null })
+                    activePromptManager.saveCustomChatTitleForPrompt(
+                        ActivePrompt.CharacterCard(card.id),
+                        card.name.ifEmpty { null },
+                    )
                 }
                 showAddCharacterCardDialog = false
                 showEditCharacterCardDialog = false
@@ -706,7 +715,10 @@ fun ModelPromptsSettingsScreen(
             )
             val newCardId = characterCardManager.createCharacterCard(duplicatedCard)
             characterCardManager.cloneBindingsFromCharacterCard(card.id, newCardId)
-            userPreferencesManager.saveCustomChatTitleForCharacterCard(newCardId, duplicatedCard.name.ifEmpty { null })
+            activePromptManager.saveCustomChatTitleForPrompt(
+                ActivePrompt.CharacterCard(newCardId),
+                duplicatedCard.name.ifEmpty { null },
+            )
             showDuplicateSuccessMessage = true
             refreshTrigger++
         }
@@ -719,15 +731,15 @@ fun ModelPromptsSettingsScreen(
                 val isNew = group.id.isBlank()
                 if (isNew) {
                     val newGroupId = characterGroupCardManager.createCharacterGroupCard(group)
-                    userPreferencesManager.saveCustomChatTitleForCharacterGroup(
-                        newGroupId,
-                        group.name.ifEmpty { null }
+                    activePromptManager.saveCustomChatTitleForPrompt(
+                        ActivePrompt.CharacterGroup(newGroupId),
+                        group.name.ifEmpty { null },
                     )
                 } else {
                     characterGroupCardManager.updateCharacterGroupCard(group)
-                    userPreferencesManager.saveCustomChatTitleForCharacterGroup(
-                        group.id,
-                        group.name.ifEmpty { null }
+                    activePromptManager.saveCustomChatTitleForPrompt(
+                        ActivePrompt.CharacterGroup(group.id),
+                        group.name.ifEmpty { null },
                     )
                 }
                 showAddGroupCardDialog = false
@@ -744,9 +756,9 @@ fun ModelPromptsSettingsScreen(
             val duplicatedName = group.name + context.getString(R.string.card_copy_suffix)
             val newGroupId = characterGroupCardManager.duplicateCharacterGroupCard(group.id, duplicatedName)
             if (!newGroupId.isNullOrBlank()) {
-                userPreferencesManager.saveCustomChatTitleForCharacterGroup(
-                    newGroupId,
-                    duplicatedName.ifEmpty { null }
+                activePromptManager.saveCustomChatTitleForPrompt(
+                    ActivePrompt.CharacterGroup(newGroupId),
+                    duplicatedName.ifEmpty { null },
                 )
             }
             showDuplicateSuccessMessage = true
@@ -1172,7 +1184,10 @@ fun ModelPromptsSettingsScreen(
             onAvatarReset = {
                 scope.launch {
                     editingCharacterCard?.let {
-                        userPreferencesManager.saveAiAvatarForCharacterCard(it.id, null)
+                        activePromptManager.saveAiAvatarForPrompt(
+                            ActivePrompt.CharacterCard(it.id),
+                            null,
+                        )
                         refreshTrigger++
                     }
                 }
@@ -1210,7 +1225,10 @@ fun ModelPromptsSettingsScreen(
             onAvatarReset = {
                 scope.launch {
                     editingCharacterCard?.let {
-                        userPreferencesManager.saveAiAvatarForCharacterCard(it.id, null)
+                        activePromptManager.saveAiAvatarForPrompt(
+                            ActivePrompt.CharacterCard(it.id),
+                            null,
+                        )
                         refreshTrigger++
                     }
                 }
@@ -1279,7 +1297,10 @@ fun ModelPromptsSettingsScreen(
             onAvatarReset = {
                 scope.launch {
                     editingGroupCard?.let { group ->
-                        userPreferencesManager.saveAiAvatarForCharacterGroup(group.id, null)
+                        activePromptManager.saveAiAvatarForPrompt(
+                            ActivePrompt.CharacterGroup(group.id),
+                            null,
+                        )
                         Toast.makeText(context, context.getString(R.string.avatar_reset), Toast.LENGTH_SHORT).show()
                         refreshTrigger++
                     }
@@ -1307,7 +1328,10 @@ fun ModelPromptsSettingsScreen(
             onAvatarReset = {
                 scope.launch {
                     editingGroupCard?.let { group ->
-                        userPreferencesManager.saveAiAvatarForCharacterGroup(group.id, null)
+                        activePromptManager.saveAiAvatarForPrompt(
+                            ActivePrompt.CharacterGroup(group.id),
+                            null,
+                        )
                         Toast.makeText(context, context.getString(R.string.avatar_reset), Toast.LENGTH_SHORT).show()
                         refreshTrigger++
                     }

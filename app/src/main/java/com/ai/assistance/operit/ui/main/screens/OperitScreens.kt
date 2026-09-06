@@ -63,9 +63,9 @@ import com.ai.assistance.operit.ui.features.settings.screens.SettingsScreen
 import com.ai.assistance.operit.ui.features.settings.screens.SpeechServicesSettingsScreen
 import com.ai.assistance.operit.ui.features.settings.screens.ThemeSettingsScreen
 import com.ai.assistance.operit.ui.features.settings.screens.ToolPermissionSettingsScreen
-import com.ai.assistance.operit.ui.features.settings.screens.UserPreferencesSettingsScreen
 import com.ai.assistance.operit.ui.features.settings.screens.MnnModelDownloadScreen
-import com.ai.assistance.operit.ui.features.settings.screens.TokenUsageStatisticsScreen
+import com.ai.assistance.operit.ui.features.settings.screens.UserPreferencesSettingsScreen
+import com.ai.assistance.operit.ui.features.tokenstats.TokenUsageStatisticsScreen
 import com.ai.assistance.operit.ui.features.token.TokenConfigWebViewScreen
 import com.ai.assistance.operit.ui.features.toolbox.screens.AppPermissionsToolScreen
 import com.ai.assistance.operit.ui.features.toolbox.screens.FileManagerToolScreen
@@ -106,9 +106,24 @@ sealed class Screen(
         // 是否参与 AppContent 的跨页淡入淡出。
         // 某些包含实时渲染视图的页面在转场中保留上一页会产生明显残影。
         open val participatesInCrossfadeTransition: Boolean = true,
-        open val keepAlive: Boolean = false
+        open val keepAlive: Boolean = false,
+        /**
+         * 是否使用路由级 ViewModelStore（AppContent 按 screenKey 通过
+         * [com.ai.assistance.operit.ui.main.navigation.ScreenRouteViewModelStoreOwnerManager]
+         * 管理）：配置变化保留实例，路由出栈/替换/清栈时 store.clear() 触发
+         * onCleared（viewModelScope 取消）。
+         * 默认 false 保持 Activity 级语义，防止影响其他页面。
+         */
+        open val usesRouteViewModelStore: Boolean = false
 ) {
     open fun stableScreenKey(): String? = null
+
+    /**
+     * AppContent 使用的屏幕键：keepAlive 屏幕用 [stableScreenKey]（同路由
+     * 实例复用），否则用路由实例 id（每次进入独立）。
+     */
+    fun screenKey(routeInstanceId: String): String =
+        if (keepAlive) stableScreenKey() ?: routeInstanceId else routeInstanceId
 
     // 屏幕内容渲染函数
     @Composable
@@ -143,7 +158,7 @@ sealed class Screen(
                     hasBackgroundImage = hasBackgroundImage,
                     onNavigateToTokenConfig = { navigateTo(TokenConfig) },
                     onNavigateToSettings = { navigateTo(Settings) },
-                    onNavigateToUserPreferences = { navigateTo(UserPreferencesSettings) },
+                    onNavigateToMemoryBase = { navigateTo(MemoryBase) },
                     onNavigateToModelConfig = { navigateTo(ModelConfig) },
                     onNavigateToOnboardingModelConfig = { navigateTo(ModelConfigOnboarding) },
                     onNavigateToModelPrompts = { navigateTo(ModelPromptsSettings) },
@@ -366,11 +381,11 @@ sealed class Screen(
                 onNavigateToEditRepo = { type, issue ->
                     navigateTo(RepoEdit(type, issue))
                 },
-                onNavigateToPublishArtifactVersion = { issue ->
-                    navigateTo(ArtifactContinuePublish(issue.toArtifactPublishClusterContext()))
+                onNavigateToPublishArtifactVersion = { issue, canEditEntry ->
+                    navigateTo(ArtifactContinuePublish(issue.toArtifactPublishClusterContext(canEditEntry)))
                 },
-                onNavigateToPublishRepoVersion = { type, issue ->
-                    navigateTo(RepoPublishVersion(type, issue))
+                onNavigateToPublishRepoVersion = { type, issue, canEditEntry ->
+                    navigateTo(RepoPublishVersion(type, issue, canEditEntry))
                 },
                 onNavigateToPublishArtifact = { navigateTo(ArtifactPublish) },
                 onNavigateToPublishRepo = { type -> navigateTo(RepoPublish(type)) },
@@ -499,7 +514,8 @@ sealed class Screen(
 
     data class RepoPublishVersion(
         val type: MarketStatsType,
-        val editingEntry: com.ai.assistance.operit.data.api.MarketV2Entry
+        val editingEntry: com.ai.assistance.operit.data.api.MarketV2Entry,
+        val canEditEntry: Boolean = false
     ) : Screen(navItem = NavItem.Packages) {
         @Composable
         override fun Content(
@@ -515,7 +531,8 @@ sealed class Screen(
                 type = type,
                 onNavigateBack = onGoBack,
                 editingEntry = editingEntry,
-                publishVersionOnly = true
+                publishVersionOnly = true,
+                canEditEntry = canEditEntry
             )
         }
 
@@ -582,8 +599,8 @@ sealed class Screen(
                 onGestureConsumed: (Boolean) -> Unit
         ) {
             SettingsScreen(
+                    navigateToUserPreferences = { navigateTo(UserPreferencesSettings) },
                     navigateToToolPermissions = { navigateTo(ToolPermission) },
-                    onNavigateToUserPreferences = { navigateTo(UserPreferencesSettings) },
                     navigateToGitHubAccount = { navigateTo(GitHubAccount) },
                     navigateToModelConfig = { navigateTo(ModelConfig) },
                     navigateToThemeSettings = { navigateTo(ThemeSettings) },
@@ -761,6 +778,25 @@ sealed class Screen(
     }
 
     // Secondary screens - Settings
+    data object UserPreferencesSettings :
+            Screen(navItem = NavItem.Settings, titleRes = R.string.settings_user_preferences) {
+        @Composable
+        override fun Content(
+                navController: NavController,
+                navigateTo: ScreenNavigationHandler,
+                onGoBack: () -> Unit,
+                hasBackgroundImage: Boolean,
+                onLoading: (Boolean) -> Unit,
+                onError: (String) -> Unit,
+                onGestureConsumed: (Boolean) -> Unit
+        ) {
+            UserPreferencesSettingsScreen(
+                onNavigateBack = onGoBack,
+                onNavigateToMemory = { navigateTo(MemoryBase) }
+            )
+        }
+    }
+
     data object ToolPermission :
             Screen(navItem = NavItem.Settings, titleRes = R.string.screen_title_tool_permissions) {
         @Composable
@@ -774,22 +810,6 @@ sealed class Screen(
                 onGestureConsumed: (Boolean) -> Unit
         ) {
             ToolPermissionSettingsScreen(navigateBack = onGoBack)
-        }
-    }
-
-    data object UserPreferencesSettings :
-            Screen(navItem = NavItem.Settings, titleRes = R.string.screen_title_user_preferences_settings) {
-        @Composable
-        override fun Content(
-                navController: NavController,
-                navigateTo: ScreenNavigationHandler,
-                onGoBack: () -> Unit,
-                hasBackgroundImage: Boolean,
-                onLoading: (Boolean) -> Unit,
-                onError: (String) -> Unit,
-                onGestureConsumed: (Boolean) -> Unit
-        ) {
-            UserPreferencesSettingsScreen(onNavigateBack = onGoBack)
         }
     }
 
@@ -897,7 +917,6 @@ sealed class Screen(
         ) {
             com.ai.assistance.operit.ui.features.settings.screens.PersonaCardGenerationScreen(
                 onNavigateToSettings = { navigateTo(Settings) },
-                onNavigateToUserPreferences = { navigateTo(UserPreferencesSettings) },
                 onNavigateToModelConfig = { navigateTo(ModelConfig) },
                 onNavigateToModelPrompts = { navigateTo(ModelPromptsSettings) }
             )
@@ -1096,7 +1115,11 @@ sealed class Screen(
     }
 
     data object TokenUsageStatistics :
-            Screen(navItem = NavItem.Settings, titleRes = R.string.settings_token_usage_stats) {
+            Screen(
+                    navItem = NavItem.Settings,
+                    titleRes = R.string.settings_token_usage_stats,
+                    usesRouteViewModelStore = true
+            ) {
         @Composable
         override fun Content(
                 navController: NavController,
@@ -1107,7 +1130,9 @@ sealed class Screen(
                 onError: (String) -> Unit,
                 onGestureConsumed: (Boolean) -> Unit
         ) {
-            TokenUsageStatisticsScreen(onBackPressed = onGoBack)
+            TokenUsageStatisticsScreen(
+                    onBackPressed = onGoBack,
+            )
         }
     }
 

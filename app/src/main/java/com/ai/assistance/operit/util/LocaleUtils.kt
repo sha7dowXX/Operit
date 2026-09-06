@@ -24,6 +24,7 @@ object LocaleUtils {
         const val MALAY = "ms"
         const val INDONESIAN = "id"
         const val PORTUGUESE_BRAZIL = "pt-BR"
+        const val ROMANIAN = "ro"
     }
 
     private val legacyLanguageCodeAliases =
@@ -50,7 +51,8 @@ object LocaleUtils {
                             LanguageCodes.PORTUGUESE_BRAZIL,
                             "Portuguese (Brazil)",
                             "Português (Brasil)"
-                    )
+                    ),
+                    Language(LanguageCodes.ROMANIAN, "Romanian", "Română")
             )
 
     private val supportedLanguageCodes =
@@ -75,6 +77,18 @@ object LocaleUtils {
                 ?: Locale(resolvedCode)
     }
 
+    fun createLocaleOverrideConfiguration(locale: Locale): Configuration {
+        // Keep this override sparse so window size and orientation continue to update.
+        return Configuration().apply {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                setLocales(LocaleList(locale))
+            } else {
+                @Suppress("DEPRECATION")
+                setLocale(locale)
+            }
+        }
+    }
+
     /**
      * 获取包含当前应用语言设置的上下文。
      * 对于使用applicationContext的单例或服务，这非常有用，
@@ -86,19 +100,7 @@ object LocaleUtils {
     fun getLocalizedContext(context: Context): Context {
         val lang = getCurrentLanguage(context)
         val locale = getLocaleForLanguageCode(lang, context)
-
-        val configuration = Configuration(context.resources.configuration)
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-            configuration.setLocale(locale)
-            val localeList = LocaleList(locale)
-            configuration.setLocales(localeList)
-        } else {
-            @Suppress("DEPRECATION")
-            configuration.setLocale(locale)
-        }
-
-        return context.createConfigurationContext(configuration)
+        return context.createConfigurationContext(createLocaleOverrideConfiguration(locale))
     }
 
     /**

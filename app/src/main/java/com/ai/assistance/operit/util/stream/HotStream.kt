@@ -16,6 +16,9 @@ interface SharedStream<T> : Stream<T> {
 
     /** 重放缓存大小 */
     val replayCache: List<T>
+
+    /** 上游结束时的异常；正常结束或尚未结束时为 null。 */
+    val completionCause: Throwable?
 }
 
 /** 可变共享Stream接口，类似于MutableSharedFlow */
@@ -62,7 +65,8 @@ internal fun <T> SharedStream<T>.getInternalSubscriptionCountFlow():
 class MutableSharedStreamImpl<T>(
         replay: Int = 0,
         extraBufferCapacity: Int = 0,
-        onBufferOverflow: BufferOverflow = BufferOverflow.SUSPEND
+        onBufferOverflow: BufferOverflow = BufferOverflow.SUSPEND,
+        private val propagateCompletionCause: Boolean = true,
 ) : MutableSharedStream<T> {
     private sealed interface SharedEvent<out T> {
         data class Value<T>(val payload: T) : SharedEvent<T>
@@ -103,6 +107,9 @@ class MutableSharedStreamImpl<T>(
 
     override val replayCache: List<T>
         get() = synchronized(stateLock) { replayBuffer.toList() }
+
+    override val completionCause: Throwable?
+        get() = synchronized(stateLock) { closeCause }
 
     override suspend fun emit(value: T) {
         val subscriberChannels =
@@ -185,7 +192,7 @@ class MutableSharedStreamImpl<T>(
             }
 
             if (subscriberChannel == null) {
-                if (closedSnapshot != null) {
+                if (closedSnapshot != null && propagateCompletionCause) {
                     throw closedSnapshot
                 }
                 return
@@ -195,7 +202,7 @@ class MutableSharedStreamImpl<T>(
                 when (event) {
                     is SharedEvent.Value -> collector.emit(event.payload)
                     is SharedEvent.Completion -> {
-                        if (event.cause != null) {
+                        if (event.cause != null && propagateCompletionCause) {
                             throw event.cause
                         }
                         return
@@ -203,7 +210,7 @@ class MutableSharedStreamImpl<T>(
                 }
             }
 
-            if (closedSnapshot != null) {
+            if (closedSnapshot != null && propagateCompletionCause) {
                 throw closedSnapshot
             }
         } finally {
@@ -263,6 +270,9 @@ class MutableStateStreamImpl<T>(initialValue: T) : MutableStateStream<T> {
     override val replayCache: List<T>
         get() = internalFlow.replayCache
 
+    override val completionCause: Throwable?
+        get() = null
+
     override suspend fun emit(value: T) {
         internalFlow.emit(value)
     }
@@ -289,9 +299,15 @@ fun <T> MutableSharedStream(
         replay: Int = 0,
         extraBufferCapacity: Int = 0,
         onBufferOverflow: BufferOverflow = BufferOverflow.SUSPEND,
-        context: CoroutineContext = EmptyCoroutineContext
+        context: CoroutineContext = EmptyCoroutineContext,
+        propagateCompletionCause: Boolean = true,
 ): MutableSharedStream<T> {
-    return MutableSharedStreamImpl<T>(replay, extraBufferCapacity, onBufferOverflow)
+    return MutableSharedStreamImpl(
+        replay = replay,
+        extraBufferCapacity = extraBufferCapacity,
+        onBufferOverflow = onBufferOverflow,
+        propagateCompletionCause = propagateCompletionCause,
+    )
 }
 
 /** 创建一个MutableStateStream */
@@ -304,9 +320,15 @@ fun <T> Stream<T>.share(
         scope: CoroutineScope,
         replay: Int = 0,
         started: StreamStart = StreamStart.EAGERLY,
-        onComplete: suspend () -> Unit = {}
+        onComplete: suspend () -> Unit = {},
+        // 共享流可被多个观察者消费；聊天场景由主订阅读取 completionCause，
+        // 旁观订阅者不应因同一 provider 失败被协程异常打断。
+        propagateCompletionCause: Boolean = true,
 ): SharedStream<T> {
-    val sharedStream = MutableSharedStreamImpl<T>(replay = replay)
+    val sharedStream = MutableSharedStreamImpl<T>(
+        replay = replay,
+        propagateCompletionCause = propagateCompletionCause,
+    )
     var upstreamJob: Job? = null
 
     when (started) {
@@ -314,13 +336,13 @@ fun <T> Stream<T>.share(
             // 这个Job现在是scope的直接子Job
             upstreamJob =
                     scope.launch {
+                        var completionCause: Throwable? = null
                         try {
                             this@share.collect { value -> sharedStream.emit(value) }
+                        } catch (error: Throwable) {
+                            completionCause = error
                         } finally {
-                            // 当上游流完成或被取消时，我们不再需要这个共享流。
-                            // 但由于SharedFlow本身不会"关闭"，依赖协程的结构化并发来清理是最好的方式。
-                            // 此处的finally确保了协程在任何情况下（完成、取消、异常）都能结束。
-                            sharedStream.close() // 关闭流以允许收集器完成
+                            sharedStream.close(completionCause)
                             onComplete()
                         }
                     }
@@ -333,12 +355,15 @@ fun <T> Stream<T>.share(
                         if (count > 0 && upstreamJob?.isActive != true) {
                             upstreamJob =
                                     scope.launch {
+                                        var completionCause: Throwable? = null
                                         try {
                                             this@share.collect { emittedValue ->
                                                 sharedStream.emit(emittedValue)
                                             }
+                                        } catch (error: Throwable) {
+                                            completionCause = error
                                         } finally {
-                                            sharedStream.close() // 关闭流以允许收集器完成
+                                            sharedStream.close(completionCause)
                                             onComplete()
                                         }
                                     }
@@ -354,10 +379,13 @@ fun <T> Stream<T>.share(
                     )
                     // Fallback to EAGERLY behavior
                     scope.launch {
+                        var completionCause: Throwable? = null
                         try {
                             this@share.collect { value -> sharedStream.emit(value) }
+                        } catch (error: Throwable) {
+                            completionCause = error
                         } finally {
-                            sharedStream.close() // 关闭流以允许收集器完成
+                            sharedStream.close(completionCause)
                             onComplete()
                         }
                     }

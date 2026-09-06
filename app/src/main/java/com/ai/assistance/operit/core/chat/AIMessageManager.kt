@@ -110,6 +110,7 @@ object AIMessageManager {
      * @param workspaceEnv 工作区环境标签。
      * @param replyToMessage 回复消息。
      * @param enableDirectImageProcessing 是否将图片附件转换为link标签（用于直接图片处理）。
+     * @param enableDirectFileProcessing 是否将PDF附件转换为文件link（用于直接文件处理）。
      * @param enableDirectAudioProcessing 是否将音频附件转换为link标签（用于直接音频处理）。
      * @param enableDirectVideoProcessing 是否将视频附件转换为link标签（用于直接视频处理）。
      * @return 格式化后的完整消息字符串。
@@ -122,15 +123,23 @@ object AIMessageManager {
         workspacePath: String? = null,
         workspaceEnv: String? = null,
         replyToMessage: ChatMessage? = null,
-        enableDirectImageProcessing: Boolean = false,
-        enableDirectAudioProcessing: Boolean = false,
+         enableDirectImageProcessing: Boolean = false,
+         enableDirectFileProcessing: Boolean = false,
+         enableDirectAudioProcessing: Boolean = false,
         enableDirectVideoProcessing: Boolean = false,
         chatId: String? = null,
-        roleCardId: String? = null
+        roleCardId: String? = null,
+        onHookTimeout: ((String) -> Unit)? = null
     ): String {
         val totalStartTime = messageTimingNow()
         val promptInputStartTime = messageTimingNow()
-        val processedMessageText = InputProcessor.processUserInput(context, messageText, chatId, roleCardId)
+        val processedMessageText = InputProcessor.processUserInput(
+            context = context,
+            input = messageText,
+            chatId = chatId,
+            roleCardId = roleCardId,
+            onHookTimeout = onHookTimeout
+        )
         logMessageTiming(
             stage = "buildUserMessageContent.processUserInput",
             startTimeMs = promptInputStartTime,
@@ -227,6 +236,15 @@ object AIMessageManager {
                         }
                         "<attachment $attributes>${attachment.content}</attachment>"
                     }
+                } else if (
+                    enableDirectFileProcessing &&
+                    attachment.mimeType.equals("application/pdf", ignoreCase = true)
+                ) {
+                    val fileId = MediaPoolManager.addMedia(attachment.filePath, attachment.mimeType)
+                    check(fileId != "error") {
+                        "Failed to add PDF attachment to the media pool: ${attachment.filePath}"
+                    }
+                    MediaLinkBuilder.file(context, fileId, attachment.fileName)
                 } else if (enableDirectAudioProcessing && attachment.mimeType.startsWith("audio/", ignoreCase = true)) {
                     try {
                         val audioId = MediaPoolManager.addMedia(attachment.filePath, attachment.mimeType)
@@ -282,7 +300,7 @@ object AIMessageManager {
         logMessageTiming(
             stage = "buildUserMessageContent.attachmentTags",
             startTimeMs = attachmentTagsStartTime,
-            details = "attachments=${attachments.size}, length=${attachmentTags.length}, directImage=$enableDirectImageProcessing, directAudio=$enableDirectAudioProcessing, directVideo=$enableDirectVideoProcessing"
+            details = "attachments=${attachments.size}, length=${attachmentTags.length}, directImage=$enableDirectImageProcessing, directFile=$enableDirectFileProcessing, directAudio=$enableDirectAudioProcessing, directVideo=$enableDirectVideoProcessing"
         )
 
         // 4. 组合最终消息
@@ -426,6 +444,7 @@ object AIMessageManager {
                 val pluginStream = pluginExecution.stream.share(
                     scope = scope,
                     replay = Int.MAX_VALUE,
+                    propagateCompletionCause = false,
                     onComplete = {
                         activeMessageProcessingControllerByChatId.remove(chatKey)
                         activeEnhancedAiServiceByChatId.remove(chatKey)
@@ -484,6 +503,9 @@ object AIMessageManager {
             ).shareRevisable(
                 scope = scope,
                 replay = Int.MAX_VALUE,
+                // Provider 终态异常由消息处理主订阅读取 completionCause；
+                // 其他订阅者只观察文本，不应因同一网络错误触发全局未捕获异常。
+                propagateCompletionCause = false,
                 onComplete = {
                     activeMessageProcessingControllerByChatId.remove(chatKey)
                     activeEnhancedAiServiceByChatId.remove(chatKey)
@@ -521,7 +543,7 @@ object AIMessageManager {
         chatModelIndexOverride: Int? = null,
         memorySpaceIdOverride: String? = null,
         publishEstimate: Boolean = true
-    ): Int {
+    ): Long {
         val memory =
             getMemoryFromMessages(
                 messages = chatHistory,
@@ -881,7 +903,7 @@ object AIMessageManager {
                 val omitted = (cleanedSegments.size - head.size - tail.size).coerceAtLeast(0)
                 cleanedSegments.clear()
                 cleanedSegments.addAll(head)
-                cleanedSegments.add(Segment(kind = "text", raw = context.getString(R.string.ai_message_omitted_segment, omitted) ) )
+                cleanedSegments.add(Segment(kind = "text", raw = context.getString(R.string.ai_message_omitted_segment, omitted.toString()) ) )
                 cleanedSegments.addAll(tail)
             }
 
@@ -1073,7 +1095,7 @@ object AIMessageManager {
         if (topPackages.isEmpty()) {
             val emptyMessage =
                 if (useEnglish) {
-                    "No package-prefixed tool usage was detected in this summary window, so no package was preheated."
+                    "No activated packages were detected in this summary window."
                 } else {
                     context.getString(R.string.ai_message_package_warmup_empty)
                 }
@@ -1082,7 +1104,7 @@ object AIMessageManager {
 
         val intro =
             if (useEnglish) {
-                "The following high-frequency packages were automatically activated from the summarized tool usage, and their use_package results are attached for the next-turn warmup."
+                "The following activated packages can be used directly."
             } else {
                 context.getString(R.string.ai_message_package_warmup_intro)
             }
@@ -1115,6 +1137,7 @@ object AIMessageManager {
 
                     if (useEnglish) {
                         appendLine("${index + 1}. Package ${stat.packageName} (${stat.count} hits)")
+                        appendLine("   Activated package: the tool prompt below can be used directly.")
                     } else {
                         appendLine(
                             context.getString(
@@ -1124,6 +1147,7 @@ object AIMessageManager {
                                 stat.count
                             )
                         )
+                        appendLine("   已激活包：以下工具提示可以直接使用。")
                     }
                     appendLine(indentBlock(resultText, "   "))
                     if (index != topPackages.lastIndex) {
@@ -1238,7 +1262,7 @@ object AIMessageManager {
      */
     fun shouldGenerateSummary(
         messages: List<ChatMessage>,
-        currentTokens: Int,
+        currentTokens: Long,
         maxTokens: Int,
         tokenUsageThreshold: Double,
         enableSummary: Boolean,

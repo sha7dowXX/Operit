@@ -96,9 +96,9 @@ import com.ai.assistance.operit.util.LocaleUtils
  */
 class EnhancedAIService private constructor(private val context: Context) {
     data class TurnTokenSnapshot(
-        val inputTokens: Int,
-        val outputTokens: Int,
-        val cachedInputTokens: Int,
+        val inputTokens: Long,
+        val outputTokens: Long,
+        val cachedInputTokens: Long,
     )
 
     companion object {
@@ -197,7 +197,7 @@ class EnhancedAIService private constructor(private val context: Context) {
         suspend fun getCurrentInputTokenCountForFunction(
                 context: Context,
                 functionType: FunctionType
-        ): Int {
+        ): Long {
             return getInstance(context)
                     .multiServiceManager
                     .getServiceForFunction(functionType)
@@ -213,7 +213,7 @@ class EnhancedAIService private constructor(private val context: Context) {
         suspend fun getCurrentOutputTokenCountForFunction(
                 context: Context,
                 functionType: FunctionType
-        ): Int {
+        ): Long {
             return getInstance(context)
                     .multiServiceManager
                     .getServiceForFunction(functionType)
@@ -395,12 +395,12 @@ class EnhancedAIService private constructor(private val context: Context) {
     }
 
     // Per-request token counts
-    private val _perRequestTokenCounts = MutableStateFlow<Pair<Int, Int>?>(null)
-    val perRequestTokenCounts: StateFlow<Pair<Int, Int>?> = _perRequestTokenCounts.asStateFlow()
+    private val _perRequestTokenCounts = MutableStateFlow<Pair<Long, Long>?>(null)
+    val perRequestTokenCounts: StateFlow<Pair<Long, Long>?> = _perRequestTokenCounts.asStateFlow()
 
     // Stable request window estimate for the next model hop.
-    private val _requestWindowEstimate = MutableStateFlow<Int?>(null)
-    val requestWindowEstimateFlow: StateFlow<Int?> = _requestWindowEstimate.asStateFlow()
+    private val _requestWindowEstimate = MutableStateFlow<Long?>(null)
+    val requestWindowEstimateFlow: StateFlow<Long?> = _requestWindowEstimate.asStateFlow()
 
     // Conversation management
     // private val streamBuffer = StringBuilder() // Moved to MessageExecutionContext
@@ -501,17 +501,12 @@ class EnhancedAIService private constructor(private val context: Context) {
     // private val conversationHistory = mutableListOf<Pair<String, String>>() // Moved to MessageExecutionContext
     // private val conversationMutex = Mutex() // Moved to MessageExecutionContext
 
-    private var accumulatedInputTokenCount = 0
-    private var accumulatedOutputTokenCount = 0
-    private var accumulatedCachedInputTokenCount = 0
-    private var currentRequestInputTokenCount = 0
-    private var currentRequestOutputTokenCount = 0
-    private var currentRequestCachedInputTokenCount = 0
-
-    private fun saturatedTokenSum(vararg values: Int): Int {
-        val total = values.fold(0L) { acc, value -> acc + value.toLong().coerceAtLeast(0L) }
-        return total.coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
-    }
+    private var accumulatedInputTokenCount = 0L
+    private var accumulatedOutputTokenCount = 0L
+    private var accumulatedCachedInputTokenCount = 0L
+    private var currentRequestInputTokenCount = 0L
+    private var currentRequestOutputTokenCount = 0L
+    private var currentRequestCachedInputTokenCount = 0L
 
     // Callbacks
     private var currentResponseCallback: ((content: String, thinking: String?) -> Unit)? = null
@@ -669,7 +664,36 @@ class EnhancedAIService private constructor(private val context: Context) {
         }
     }
 
-    private fun publishRequestWindowEstimate(windowSize: Int) {
+    suspend fun callFunctionModel(
+        functionType: FunctionType,
+        turns: List<PromptTurn>,
+        enableThinking: Boolean = false,
+        recordTokenUsage: Boolean = true
+    ): String {
+        ensureInitialized()
+        val serviceForFunction = getAIServiceForFunction(functionType)
+        val modelParameters = getModelParametersForFunction(functionType)
+        val output = StringBuilder()
+
+        serviceForFunction
+            .sendMessage(
+                context = context,
+                chatHistory = turns,
+                modelParameters = modelParameters,
+                enableThinking = enableThinking,
+                stream = false,
+                availableTools = emptyList(),
+                preserveThinkInHistory = true,
+                recordTokenUsage = recordTokenUsage
+            )
+            .collect { chunk ->
+                output.append(chunk)
+            }
+
+        return output.toString()
+    }
+
+    private fun publishRequestWindowEstimate(windowSize: Long) {
         _requestWindowEstimate.value = windowSize
     }
 
@@ -678,7 +702,7 @@ class EnhancedAIService private constructor(private val context: Context) {
         preparedHistory: List<PromptTurn>,
         availableTools: List<ToolPrompt>?,
         publishEstimate: Boolean
-    ): Int {
+    ): Long {
         val windowSize =
             serviceForFunction.calculateInputTokens(
                 chatHistory = preparedHistory,
@@ -762,7 +786,7 @@ class EnhancedAIService private constructor(private val context: Context) {
         memorySpaceIdOverride: String? = null,
         stream: Boolean = true,
         publishEstimate: Boolean = true
-    ): Int {
+    ): Long {
         val modelConfig =
             getModelConfigForFunction(
                 functionType = functionType,
@@ -855,10 +879,6 @@ class EnhancedAIService private constructor(private val context: Context) {
             finalProcessedInput = ChatUtils.stripGeminiThoughtSignatureMeta(finalProcessedInput)
             finalPreparedHistory = ChatUtils.stripGeminiThoughtSignatureMetaTurns(finalPreparedHistory)
         }
-        if (!ChatUtils.isOpenAIResponsesProviderModel(serviceForFunction.providerModel)) {
-            finalProcessedInput = ChatUtils.stripOpenAiResponsesReasoningMeta(finalProcessedInput)
-            finalPreparedHistory = ChatUtils.stripOpenAiResponsesReasoningMetaTurns(finalPreparedHistory)
-        }
 
         val requestHistory =
             applyFinalizedCurrentUserTurn(
@@ -933,12 +953,12 @@ class EnhancedAIService private constructor(private val context: Context) {
             }
 
         AppLogger.d(TAG, "sendMessage调用开始: 功能类型=$functionType, 提示词类型=$promptFunctionType")
-        accumulatedInputTokenCount = 0
-        accumulatedOutputTokenCount = 0
-        accumulatedCachedInputTokenCount = 0
-        currentRequestInputTokenCount = 0
-        currentRequestOutputTokenCount = 0
-        currentRequestCachedInputTokenCount = 0
+        accumulatedInputTokenCount = 0L
+        accumulatedOutputTokenCount = 0L
+        accumulatedCachedInputTokenCount = 0L
+        currentRequestInputTokenCount = 0L
+        currentRequestOutputTokenCount = 0L
+        currentRequestCachedInputTokenCount = 0L
 
         val eventChannel = MutableSharedStream<TextStreamEvent>(replay = Int.MAX_VALUE)
         val wrappedStream = stream {
@@ -950,6 +970,7 @@ class EnhancedAIService private constructor(private val context: Context) {
                 )
             registerExecutionContext(execContext)
             var hadFatalError = false
+            var providerStreamCollectionStarted = false
             try {
                 // 确保所有操作都在IO线程上执行
                 withContext(Dispatchers.IO) {
@@ -1019,9 +1040,9 @@ class EnhancedAIService private constructor(private val context: Context) {
 
                     // 清空之前的单次请求token计数
                     _perRequestTokenCounts.value = null
-                    currentRequestInputTokenCount = 0
-                    currentRequestOutputTokenCount = 0
-                    currentRequestCachedInputTokenCount = 0
+                    currentRequestInputTokenCount = 0L
+                    currentRequestOutputTokenCount = 0L
+                    currentRequestCachedInputTokenCount = 0L
 
                     // 获取工具列表（如果启用Tool Call）
                     val availableTools = getAvailableToolsForFunction(
@@ -1075,10 +1096,6 @@ class EnhancedAIService private constructor(private val context: Context) {
                         finalProcessedInput = ChatUtils.stripGeminiThoughtSignatureMeta(finalProcessedInput)
                         finalPreparedHistory = ChatUtils.stripGeminiThoughtSignatureMetaTurns(finalPreparedHistory)
                     }
-                    if (!ChatUtils.isOpenAIResponsesProviderModel(serviceForFunction.providerModel)) {
-                        finalProcessedInput = ChatUtils.stripOpenAiResponsesReasoningMeta(finalProcessedInput)
-                        finalPreparedHistory = ChatUtils.stripOpenAiResponsesReasoningMetaTurns(finalPreparedHistory)
-                    }
                     val requestHistory =
                         applyFinalizedCurrentUserTurn(
                             preparedHistory = finalPreparedHistory,
@@ -1115,7 +1132,7 @@ class EnhancedAIService private constructor(private val context: Context) {
                                         currentRequestCachedInputTokenCount = cachedInput.coerceAtLeast(0)
                                         _perRequestTokenCounts.value = Pair(input, output)
                                     },
-                                    onNonFatalError = onNonFatalError
+                                     onNonFatalError = onNonFatalError,
                             )
                     val revisableStream = responseStream as? TextStreamEventCarrier
 
@@ -1132,6 +1149,7 @@ class EnhancedAIService private constructor(private val context: Context) {
                     var totalChars = 0
                     var lastLogTime = messageTimingNow()
 
+                    providerStreamCollectionStarted = true
                     coroutineScope {
                         val revisionJob =
                             revisableStream?.let { carrier ->
@@ -1148,7 +1166,7 @@ class EnhancedAIService private constructor(private val context: Context) {
                                             TextStreamEventType.ROLLBACK -> {
                                                 val snapshot =
                                                     revisionMutex.withLock {
-                                                        revisionTracker.rollback(event.id)
+                                                        revisionTracker.rollback(event.id)?.toString()
                                                     } ?: return@collect
                                                 execContext.streamBuffer.clear()
                                                 execContext.streamBuffer.append(snapshot)
@@ -1192,11 +1210,10 @@ class EnhancedAIService private constructor(private val context: Context) {
                                     revisionTracker.append(content)
                                 }
 
-                                // 更新streamBuffer，保持与原有逻辑一致
+                                // Keep both mutable accumulators synchronized without rebuilding
+                                // the complete response for every streamed chunk.
                                 execContext.streamBuffer.append(content)
-
-                                // 更新内容到轮次管理器
-                                execContext.roundManager.updateContent(execContext.streamBuffer.toString())
+                                execContext.roundManager.appendChunk(content)
 
                                 // 发射当前内容片段
                                 emit(content)
@@ -1205,22 +1222,19 @@ class EnhancedAIService private constructor(private val context: Context) {
                             revisionJob?.cancelAndJoin()
                         }
                     }
+                    providerStreamCollectionStarted = false
 
                     // Update accumulated token counts and persist them
                     val inputTokens = serviceForFunction.inputTokenCount
                     val cachedInputTokens = serviceForFunction.cachedInputTokenCount
                     val outputTokens = serviceForFunction.outputTokenCount
-                    accumulatedInputTokenCount = saturatedTokenSum(accumulatedInputTokenCount, inputTokens)
-                    accumulatedOutputTokenCount = saturatedTokenSum(accumulatedOutputTokenCount, outputTokens)
+                    accumulatedInputTokenCount += inputTokens
+                    accumulatedOutputTokenCount += outputTokens
                     accumulatedCachedInputTokenCount =
-                        saturatedTokenSum(accumulatedCachedInputTokenCount, cachedInputTokens)
-                    currentRequestInputTokenCount = 0
-                    currentRequestOutputTokenCount = 0
-                    currentRequestCachedInputTokenCount = 0
-                    apiPreferences.updateTokensForProviderModel(serviceForFunction.providerModel, inputTokens, outputTokens, cachedInputTokens)
-                    
-                    // Update request count
-                    apiPreferences.incrementRequestCountForProviderModel(serviceForFunction.providerModel)
+                        accumulatedCachedInputTokenCount + cachedInputTokens
+                    currentRequestInputTokenCount = 0L
+                    currentRequestOutputTokenCount = 0L
+                    currentRequestCachedInputTokenCount = 0L
 
                     AppLogger.d(
                             TAG,
@@ -1238,7 +1252,8 @@ class EnhancedAIService private constructor(private val context: Context) {
                 throw e
             } catch (e: Exception) {
                 // 用户取消导致的 Socket closed 是预期行为，不应作为错误处理
-                if (e.message?.contains("Socket closed", ignoreCase = true) == true) {
+                val isSocketClosed = e.message?.contains("Socket closed", ignoreCase = true) == true
+                if (isSocketClosed) {
                     if (isExecutionContextActive(execContext)) {
                         AppLogger.d(TAG, "Stream was cancelled by the user (Socket closed).")
                     } else {
@@ -1248,15 +1263,20 @@ class EnhancedAIService private constructor(private val context: Context) {
                     hadFatalError = true
                     // Handle any exceptions
                     AppLogger.e(TAG, "发送消息时发生错误: ${e.message}", e)
-                    withContext(Dispatchers.Main) {
-                        _inputProcessingState.value =
-                                InputProcessingState.Error(message = context.getString(R.string.enhanced_error_with_message, e.message ?: ""))
+                    if (!providerStreamCollectionStarted) {
+                        withContext(Dispatchers.Main) {
+                            _inputProcessingState.value =
+                                    InputProcessingState.Error(message = context.getString(R.string.enhanced_error_with_message, e.message ?: ""))
+                        }
                     }
                 }
 
                 // 发生无法处理的错误时，也应停止服务，但用户取消除外
-                if (e.message?.contains("Socket closed", ignoreCase = true) != true) {
+                if (!isSocketClosed) {
                     if (!isSubTask) stopAiService()
+                    if (!providerStreamCollectionStarted) {
+                        throw e
+                    }
                 }
             } finally {
                 try {
@@ -2313,9 +2333,9 @@ class EnhancedAIService private constructor(private val context: Context) {
 
         // 清空之前的单次请求token计数
         _perRequestTokenCounts.value = null
-        currentRequestInputTokenCount = 0
-        currentRequestOutputTokenCount = 0
-        currentRequestCachedInputTokenCount = 0
+        currentRequestInputTokenCount = 0L
+        currentRequestOutputTokenCount = 0L
+        currentRequestCachedInputTokenCount = 0L
         
         // 使用新的Stream API处理工具执行结果
         withContext(Dispatchers.IO) {
@@ -2336,7 +2356,7 @@ class EnhancedAIService private constructor(private val context: Context) {
                                     currentRequestCachedInputTokenCount = cachedInput.coerceAtLeast(0)
                                     _perRequestTokenCounts.value = Pair(input, output)
                                 },
-                                onNonFatalError = onNonFatalError
+                                 onNonFatalError = onNonFatalError,
                         )
 
                 // 更新状态为接收中
@@ -2372,7 +2392,7 @@ class EnhancedAIService private constructor(private val context: Context) {
                                         TextStreamEventType.ROLLBACK -> {
                                             val snapshot =
                                                 revisionMutex.withLock {
-                                                    revisionTracker.rollback(event.id)
+                                                    revisionTracker.rollback(event.id)?.toString()
                                                 } ?: return@collect
                                             context.streamBuffer.clear()
                                             context.streamBuffer.append(snapshot)
@@ -2400,9 +2420,7 @@ class EnhancedAIService private constructor(private val context: Context) {
 
                             // 更新streamBuffer
                             context.streamBuffer.append(content)
-
-                            // 更新内容到轮次管理器
-                            context.roundManager.updateContent(context.streamBuffer.toString())
+                            context.roundManager.appendChunk(content)
 
                             // 累计统计
                             chunkCount++
@@ -2426,17 +2444,13 @@ class EnhancedAIService private constructor(private val context: Context) {
                 val inputTokens = serviceForFunction.inputTokenCount
                 val cachedInputTokens = serviceForFunction.cachedInputTokenCount
                 val outputTokens = serviceForFunction.outputTokenCount
-                accumulatedInputTokenCount = saturatedTokenSum(accumulatedInputTokenCount, inputTokens)
-                accumulatedOutputTokenCount = saturatedTokenSum(accumulatedOutputTokenCount, outputTokens)
+                accumulatedInputTokenCount += inputTokens
+                accumulatedOutputTokenCount += outputTokens
                 accumulatedCachedInputTokenCount =
-                    saturatedTokenSum(accumulatedCachedInputTokenCount, cachedInputTokens)
-                currentRequestInputTokenCount = 0
-                currentRequestOutputTokenCount = 0
-                currentRequestCachedInputTokenCount = 0
-                apiPreferences.updateTokensForProviderModel(serviceForFunction.providerModel, inputTokens, outputTokens, cachedInputTokens)
-                
-                // Update request count
-                apiPreferences.incrementRequestCountForProviderModel(serviceForFunction.providerModel)
+                    accumulatedCachedInputTokenCount + cachedInputTokens
+                currentRequestInputTokenCount = 0L
+                currentRequestOutputTokenCount = 0L
+                currentRequestCachedInputTokenCount = 0L
 
                 AppLogger.d(
                         TAG,
@@ -2497,7 +2511,7 @@ class EnhancedAIService private constructor(private val context: Context) {
      * Get the current input token count from the last API call
      * @return The number of input tokens used in the most recent request
      */
-    fun getCurrentInputTokenCount(): Int {
+    fun getCurrentInputTokenCount(): Long {
         return accumulatedInputTokenCount
     }
 
@@ -2505,7 +2519,7 @@ class EnhancedAIService private constructor(private val context: Context) {
      * Get the current output token count from the last API call
      * @return The number of output tokens generated in the most recent response
      */
-    fun getCurrentOutputTokenCount(): Int {
+    fun getCurrentOutputTokenCount(): Long {
         return accumulatedOutputTokenCount
     }
 
@@ -2513,30 +2527,30 @@ class EnhancedAIService private constructor(private val context: Context) {
      * Get the current cached input token count accumulated across the current turn
      * @return The number of cached input tokens used in the current turn
      */
-    fun getCurrentCachedInputTokenCount(): Int {
+    fun getCurrentCachedInputTokenCount(): Long {
         return accumulatedCachedInputTokenCount
     }
 
     fun captureCurrentTurnTokenSnapshot(): TurnTokenSnapshot {
         return TurnTokenSnapshot(
-            inputTokens = saturatedTokenSum(accumulatedInputTokenCount, currentRequestInputTokenCount),
-            outputTokens = saturatedTokenSum(accumulatedOutputTokenCount, currentRequestOutputTokenCount),
+            inputTokens = accumulatedInputTokenCount + currentRequestInputTokenCount,
+            outputTokens = accumulatedOutputTokenCount + currentRequestOutputTokenCount,
             cachedInputTokens =
-                saturatedTokenSum(accumulatedCachedInputTokenCount, currentRequestCachedInputTokenCount)
+                accumulatedCachedInputTokenCount + currentRequestCachedInputTokenCount
         )
     }
 
     fun setCurrentTurnTokenCounts(
-        inputTokens: Int,
-        outputTokens: Int,
-        cachedInputTokens: Int = 0
+        inputTokens: Long,
+        outputTokens: Long,
+        cachedInputTokens: Long = 0L
     ) {
-        accumulatedInputTokenCount = inputTokens.coerceAtLeast(0)
-        accumulatedOutputTokenCount = outputTokens.coerceAtLeast(0)
-        accumulatedCachedInputTokenCount = cachedInputTokens.coerceAtLeast(0)
-        currentRequestInputTokenCount = 0
-        currentRequestOutputTokenCount = 0
-        currentRequestCachedInputTokenCount = 0
+        accumulatedInputTokenCount = inputTokens.coerceAtLeast(0L)
+        accumulatedOutputTokenCount = outputTokens.coerceAtLeast(0L)
+        accumulatedCachedInputTokenCount = cachedInputTokens.coerceAtLeast(0L)
+        currentRequestInputTokenCount = 0L
+        currentRequestOutputTokenCount = 0L
+        currentRequestCachedInputTokenCount = 0L
         _perRequestTokenCounts.value =
             Pair(accumulatedInputTokenCount, accumulatedOutputTokenCount)
         AppLogger.d(
@@ -2563,8 +2577,11 @@ class EnhancedAIService private constructor(private val context: Context) {
      * @param messages 要总结的消息列表
      * @return 生成的总结文本
      */
-    suspend fun generateSummary(messages: List<Pair<String, String>>): String {
-        return generateSummary(messages, null)
+    suspend fun generateSummary(
+        messages: List<Pair<String, String>>,
+        recordTokenUsage: Boolean = true,
+    ): String {
+        return generateSummary(messages, null, recordTokenUsage = recordTokenUsage)
     }
 
     /**
@@ -2576,30 +2593,45 @@ class EnhancedAIService private constructor(private val context: Context) {
     suspend fun generateSummary(
             messages: List<Pair<String, String>>,
             previousSummary: String?,
-            customRules: String? = null
+            customRules: String? = null,
+            recordTokenUsage: Boolean = true,
     ): String {
-        return generateSummaryFromPromptTurns(messages.toPromptTurns(), previousSummary, customRules)
+        return generateSummaryFromPromptTurns(
+            messages.toPromptTurns(),
+            previousSummary,
+            customRules,
+            recordTokenUsage,
+        )
     }
 
     suspend fun generateSummaryFromPromptTurns(
             messages: List<PromptTurn>,
             previousSummary: String?,
-            customRules: String? = null
+            customRules: String? = null,
+            recordTokenUsage: Boolean = true,
     ): String {
         // 调用ConversationService中的方法
-        return conversationService.generateSummaryFromPromptTurns(messages, previousSummary, multiServiceManager, customRules)
+        return conversationService.generateSummaryFromPromptTurns(
+            messages,
+            previousSummary,
+            multiServiceManager,
+            customRules,
+            recordTokenUsage,
+        )
     }
 
 
 
     suspend fun generateConversationTitle(
         userText: String,
-        attachmentFileNames: List<String> = emptyList()
+        attachmentFileNames: List<String> = emptyList(),
+        recordTokenUsage: Boolean = true,
     ): String {
         return conversationService.generateConversationTitle(
             userText = userText,
             attachmentFileNames = attachmentFileNames,
-            multiServiceManager = multiServiceManager
+            multiServiceManager = multiServiceManager,
+            recordTokenUsage = recordTokenUsage,
         )
     }
 
@@ -2608,7 +2640,7 @@ class EnhancedAIService private constructor(private val context: Context) {
      * @param functionType 功能类型
      * @return 输入token计数
      */
-    suspend fun getCurrentInputTokenCountForFunction(functionType: FunctionType): Int {
+    suspend fun getCurrentInputTokenCountForFunction(functionType: FunctionType): Long {
         return Companion.getCurrentInputTokenCountForFunction(context, functionType)
     }
 
@@ -2617,7 +2649,7 @@ class EnhancedAIService private constructor(private val context: Context) {
      * @param functionType 功能类型
      * @return 输出token计数
      */
-    suspend fun getCurrentOutputTokenCountForFunction(functionType: FunctionType): Int {
+    suspend fun getCurrentOutputTokenCountForFunction(functionType: FunctionType): Long {
         return Companion.getCurrentOutputTokenCountForFunction(context, functionType)
     }
 
@@ -2830,12 +2862,12 @@ class EnhancedAIService private constructor(private val context: Context) {
 
         // Reset per-request token counts
         _perRequestTokenCounts.value = null
-        accumulatedInputTokenCount = 0
-        accumulatedOutputTokenCount = 0
-        accumulatedCachedInputTokenCount = 0
-        currentRequestInputTokenCount = 0
-        currentRequestOutputTokenCount = 0
-        currentRequestCachedInputTokenCount = 0
+        accumulatedInputTokenCount = 0L
+        accumulatedOutputTokenCount = 0L
+        accumulatedCachedInputTokenCount = 0L
+        currentRequestInputTokenCount = 0L
+        currentRequestOutputTokenCount = 0L
+        currentRequestCachedInputTokenCount = 0L
 
         // Clear callback references
         currentResponseCallback = null
@@ -3119,8 +3151,8 @@ class EnhancedAIService private constructor(private val context: Context) {
      * @param text 要翻译的文本
      * @return 翻译后的文本
      */
-    suspend fun translateText(text: String): String {
-        return conversationService.translateText(text, multiServiceManager)
+    suspend fun translateText(text: String, recordTokenUsage: Boolean = true): String {
+        return conversationService.translateText(text, multiServiceManager, recordTokenUsage)
     }
 
     /**

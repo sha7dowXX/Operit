@@ -22,6 +22,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
+import java.io.IOException
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.runBlocking
 import org.json.JSONArray
 import org.json.JSONObject
@@ -65,29 +67,29 @@ class MNNProvider(
     private var cachedModelIsAudio: Boolean? = null
 
     // Token计数
-    private var _inputTokenCount = 0
-    private var _outputTokenCount = 0
-    private var _cachedInputTokenCount = 0
+    private var _inputTokenCount = 0L
+    private var _outputTokenCount = 0L
+    private var _cachedInputTokenCount = 0L
 
     @Volatile
     private var isCancelled = false
 
-    override val inputTokenCount: Int
+    override val inputTokenCount: Long
         get() = _inputTokenCount
 
-    override val outputTokenCount: Int
+    override val outputTokenCount: Long
         get() = _outputTokenCount
 
-    override val cachedInputTokenCount: Int
+    override val cachedInputTokenCount: Long
         get() = _cachedInputTokenCount
 
     override val providerModel: String
         get() = "${providerType.name}:$modelName"
 
     override fun resetTokenCounts() {
-        _inputTokenCount = 0
-        _outputTokenCount = 0
-        _cachedInputTokenCount = 0
+        _inputTokenCount = 0L
+        _outputTokenCount = 0L
+        _cachedInputTokenCount = 0L
     }
 
     override fun cancelStreaming() {
@@ -509,12 +511,14 @@ class MNNProvider(
                     PromptTurnKind.ASSISTANT,
                     PromptTurnKind.TOOL_CALL -> "assistant"
                 }
-            val content =
+            val rawContent =
                 if (!preserveThinkInHistory && turn.kind == PromptTurnKind.ASSISTANT) {
                     com.ai.assistance.operit.util.ChatUtils.removeThinkingContent(turn.content)
                 } else {
                     turn.content
                 }
+            val content =
+                com.ai.assistance.operit.util.ChatUtils.stripOpenAiResponsesProtocolMarkup(rawContent)
             role to content
         }
     }
@@ -600,9 +604,12 @@ class MNNProvider(
         stream: Boolean,
         availableTools: List<ToolPrompt>?,
         preserveThinkInHistory: Boolean,
-        onTokensUpdated: suspend (input: Int, cachedInput: Int, output: Int) -> Unit,
+        onTokensUpdated: suspend (input: Long, cachedInput: Long, output: Long) -> Unit,
+        onUsageReported: (suspend (com.ai.assistance.operit.data.stats.ProviderUsageSnapshot, attempt: Int) -> Unit)?,
         onNonFatalError: suspend (error: String) -> Unit,
-        enableRetry: Boolean
+        enableRetry: Boolean,
+        recordTokenUsage: Boolean,
+        onUsageFinalized: (suspend (attempt: Int?) -> Unit)?,
     ): Stream<String> = stream {
         isCancelled = false
 
@@ -612,14 +619,11 @@ class MNNProvider(
             // 初始化模型
             val initResult = initModel()
             if (initResult.isFailure) {
-                emit(context.getString(R.string.mnn_generic_error, initResult.exceptionOrNull()?.message ?: ""))
-                return@stream
+                // Let the caller render the specific initialization failure once.
+                throw IOException(initResult.exceptionOrNull()?.message ?: "")
             }
 
-            val session = llmSession ?: run {
-                emit(context.getString(R.string.mnn_session_not_initialized))
-                return@stream
-            }
+            val session = llmSession ?: throw IOException(context.getString(R.string.mnn_session_not_initialized))
 
             // 应用模型参数（采样参数）
             applyModelParameters(session, modelParameters)
@@ -658,66 +662,86 @@ class MNNProvider(
             val safeHistory = trimHistoryToTokenBudget(session, conversationHistory, maxPromptTokens)
 
             _inputTokenCount =
-                kotlin.runCatching { session.countTokensWithHistory(safeHistory) }
+                kotlin.runCatching { session.countTokensWithHistory(safeHistory).toLong() }
                     .getOrElse { error ->
                         if (useInternalToolCall) {
                             throw error
                         }
-                        countTokens(buildPrompt(conversationHistory))
+                        countTokens(buildPrompt(conversationHistory)).toLong()
                     }
-            onTokensUpdated(_inputTokenCount, 0, 0)
+            onTokensUpdated(_inputTokenCount, 0L, 0L)
 
             AppLogger.d(
                 TAG,
                 "开始MNN LLM推理，历史消息数: ${conversationHistory.size}, thinking模式: $enableThinking, toolCall=$useInternalToolCall"
             )
 
-            var outputTokenCount = 0
+            var outputTokenCount = 0L
             val toolCallOutputBuffer = StringBuilder()
             val finalOutputBuffer = StringBuilder()
             val emitDirectly = !useInternalToolCall
+            val usageReporter = LocalUsageReporter(
+                com.ai.assistance.operit.data.stats.ProviderUsageNormalizer.SOURCE_MNN,
+                onUsageReported,
+            )
             val success = session.generateStream(safeHistory, requestedMaxNewTokens) { token ->
-                if (isCancelled) {
-                    false
-                } else {
-                    outputTokenCount += 1
-                    _outputTokenCount = outputTokenCount
-
-                    if (emitDirectly) {
-                        finalOutputBuffer.append(token)
-                        runBlocking { emit(token) }
+                    if (isCancelled) {
+                        false
                     } else {
-                        toolCallOutputBuffer.append(token)
-                    }
+                        outputTokenCount += 1L
+                        _outputTokenCount = outputTokenCount
 
-                    kotlin.runCatching {
-                        kotlinx.coroutines.runBlocking {
-                            onTokensUpdated(_inputTokenCount, 0, _outputTokenCount)
+                        if (emitDirectly) {
+                            finalOutputBuffer.append(token)
+                            runBlocking { emit(token) }
+                        } else {
+                            toolCallOutputBuffer.append(token)
+                        }
+
+                        kotlin.runCatching {
+                            kotlinx.coroutines.runBlocking {
+                                onTokensUpdated(_inputTokenCount, 0L, _outputTokenCount)
+                            }
+                        }
+
+                        true
+                    }
+                }
+
+            LocalGenerationEnd.end(
+                cancelled = isCancelled,
+                success = success,
+                usageReporter = usageReporter,
+                inputTokens = _inputTokenCount,
+                outputTokens = _outputTokenCount,
+                cancelMessage = context.getString(R.string.mnn_error_request_cancelled),
+                emitToolResult = {
+                    if (useInternalToolCall && toolCallOutputBuffer.isNotEmpty()) {
+                        val converted =
+                            StructuredToolCallBridge.convertToolCallPayloadToXml(
+                                toolCallOutputBuffer.toString()
+                            )
+                        if (converted.isNotBlank()) {
+                            finalOutputBuffer.append(converted)
+                            emit(converted)
                         }
                     }
-
-                    true
-                }
-            }
-
-            if (useInternalToolCall && toolCallOutputBuffer.isNotEmpty()) {
-                val converted = StructuredToolCallBridge.convertToolCallPayloadToXml(toolCallOutputBuffer.toString())
-                if (converted.isNotBlank()) {
-                    finalOutputBuffer.append(converted)
-                    emit(converted)
-                }
-            }
-
-            if (!success && !isCancelled) {
-                emit(context.getString(R.string.mnn_reasoning_error))
-            }
+                },
+                failWith = {
+                    throw IOException(context.getString(R.string.mnn_reasoning_error))
+                },
+            )
+            onUsageFinalized?.invoke(1)
 
             AppLogger.i(TAG, "MNN LLM推理完成，输出token数: $_outputTokenCount")
             logFinalOutput(finalOutputBuffer, "Final MNN output summary: ")
 
+        } catch (e: CancellationException) {
+            // 取消原样传播，不 emit 错误文本
+            throw e
         } catch (e: Exception) {
             AppLogger.e(TAG, "发送消息时出错", e)
-            emit(context.getString(R.string.mnn_generic_error, e.message ?: ""))
+            throw e
         } finally {
             requestTempFiles.forEach { file ->
                 runCatching { file.delete() }
@@ -953,28 +977,25 @@ class MNNProvider(
     override suspend fun calculateInputTokens(
         chatHistory: List<PromptTurn>,
         availableTools: List<ToolPrompt>?
-    ): Int {
+    ): Long {
         val flattenedHistory = flattenTypedHistory(chatHistory, preserveThinkInHistory = false)
         val initResult = initModel()
         if (initResult.isFailure) {
             val prompt = buildPrompt(flattenedHistory)
-            return countTokens(prompt)
+            return countTokens(prompt).toLong()
         }
-
         val session = llmSession ?: run {
             val prompt = buildPrompt(flattenedHistory)
-            return countTokens(prompt)
+            return countTokens(prompt).toLong()
         }
-
         val modelDir = getModelDir(context, modelName)
         val maxAllTokens = cachedModelMaxAllTokens ?: readModelMaxAllTokens(modelDir).also { cachedModelMaxAllTokens = it }
-
         val maxPromptTokens = (maxAllTokens - 512).coerceAtLeast(128)
         val safeHistory = trimHistoryToTokenBudget(session, flattenedHistory, maxPromptTokens)
-        return kotlin.runCatching { session.countTokensWithHistory(safeHistory) }
+        return kotlin.runCatching { session.countTokensWithHistory(safeHistory).toLong() }
             .getOrElse {
                 val prompt = buildPrompt(flattenedHistory)
-                countTokens(prompt)
+                countTokens(prompt).toLong()
             }
     }
 

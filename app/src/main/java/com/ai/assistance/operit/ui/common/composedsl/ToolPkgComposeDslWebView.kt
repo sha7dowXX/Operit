@@ -1189,7 +1189,8 @@ private fun buildComposeDslWebResourceResponse(
                         runCatching {
                             java.nio.charset.Charset.forName(spec.encoding)
                         }.getOrDefault(Charsets.UTF_8)
-                    injectComposeDslWebViewBridgeRuntimeIntoHtml(file.readText(charset)).toByteArray(charset)
+                    val html = file.readBytes().toString(charset)
+                    injectComposeDslWebViewBridgeRuntimeIntoHtml(html).toByteArray(charset)
                 } else {
                     file.readBytes()
                 }

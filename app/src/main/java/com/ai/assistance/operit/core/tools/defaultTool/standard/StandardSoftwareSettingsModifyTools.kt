@@ -11,6 +11,16 @@ import com.ai.assistance.operit.core.tools.FunctionModelBindingResultData
 import com.ai.assistance.operit.core.tools.FunctionModelConfigResultData
 import com.ai.assistance.operit.core.tools.FunctionModelConfigsResultData
 import com.ai.assistance.operit.core.tools.FunctionModelMappingResultItem
+import com.ai.assistance.operit.core.tools.CharacterCardActivationResultData
+import com.ai.assistance.operit.core.tools.CharacterCardCreateResultData
+import com.ai.assistance.operit.core.tools.CharacterCardDeleteResultData
+import com.ai.assistance.operit.core.tools.CharacterCardExportResultData
+import com.ai.assistance.operit.core.tools.CharacterCardImportResultData
+import com.ai.assistance.operit.core.tools.CharacterCardResultData
+import com.ai.assistance.operit.core.tools.CharacterCardResultItem
+import com.ai.assistance.operit.core.tools.CharacterCardToolAccessConfigResultItem
+import com.ai.assistance.operit.core.tools.CharacterCardUpdateResultData
+import com.ai.assistance.operit.core.tools.CharacterCardsResultData
 import com.ai.assistance.operit.core.tools.EnvironmentVariableReadResultData
 import com.ai.assistance.operit.core.tools.EnvironmentVariableWriteResultData
 import com.ai.assistance.operit.core.tools.McpRestartLogPluginResultItem
@@ -38,8 +48,12 @@ import com.ai.assistance.operit.core.tools.javascript.JsExecutionTraceRecorder
 import com.ai.assistance.operit.core.tools.packTool.PackageManager
 import com.ai.assistance.operit.data.model.AITool
 import com.ai.assistance.operit.data.model.ApiProviderType
+import com.ai.assistance.operit.data.model.CharacterCard
+import com.ai.assistance.operit.data.model.CharacterCardChatModelBindingMode
+import com.ai.assistance.operit.data.model.CharacterCardMemoryProfileBindingMode
 import com.ai.assistance.operit.data.model.FunctionType
 import com.ai.assistance.operit.data.model.ModelConfigData
+import com.ai.assistance.operit.data.preferences.CharacterCardManager
 import com.ai.assistance.operit.data.preferences.EnvPreferences
 import com.ai.assistance.operit.data.model.ToolResult
 import com.ai.assistance.operit.data.model.getModelByIndex
@@ -48,7 +62,7 @@ import com.ai.assistance.operit.data.model.getValidModelIndex
 import com.ai.assistance.operit.data.preferences.FunctionalConfigManager
 import com.ai.assistance.operit.data.preferences.FunctionConfigMapping
 import com.ai.assistance.operit.data.preferences.ModelConfigManager
-import com.ai.assistance.operit.data.preferences.SpeechServicesPreferences
+import com.ai.assistance.operit.data.preferences.SpeechServiceProfilesPreferences
 import com.ai.assistance.operit.ui.features.startup.screens.PluginLoadingStateRegistry
 import com.ai.assistance.operit.ui.features.startup.screens.PluginStatus
 import kotlinx.coroutines.delay
@@ -422,16 +436,18 @@ class StandardSoftwareSettingsModifyTools(private val context: Context) {
 
     suspend fun getSpeechServicesConfig(tool: AITool): ToolResult {
         return try {
-            val prefs = SpeechServicesPreferences(context)
-            val ttsServiceType = prefs.ttsServiceTypeFlow.first()
-            val ttsHttpConfig = prefs.ttsHttpConfigFlow.first()
-            val ttsVitsConfig = prefs.ttsVitsPackageConfigFlow.first()
-            val ttsCleanerRegexs = prefs.ttsCleanerRegexsFlow.first()
-            val ttsSpeechRate = prefs.ttsSpeechRateFlow.first()
-            val ttsPitch = prefs.ttsPitchFlow.first()
+            val profilePrefs = SpeechServiceProfilesPreferences(context)
+            val ttsProfile = profilePrefs.getCurrentTtsProfile()
+            val sttProfile = profilePrefs.getCurrentSttProfile()
+            val ttsServiceType = ttsProfile.serviceType
+            val ttsHttpConfig = ttsProfile.httpConfig
+            val ttsVitsConfig = ttsProfile.vitsConfig
+            val ttsCleanerRegexs = ttsProfile.cleanerRegexs
+            val ttsSpeechRate = ttsProfile.speechRate
+            val ttsPitch = ttsProfile.pitch
 
-            val sttServiceType = prefs.sttServiceTypeFlow.first()
-            val sttHttpConfig = prefs.sttHttpConfigFlow.first()
+            val sttServiceType = sttProfile.serviceType
+            val sttHttpConfig = sttProfile.httpConfig
 
             ToolResult(
                 toolName = tool.name,
@@ -484,17 +500,18 @@ class StandardSoftwareSettingsModifyTools(private val context: Context) {
 
     suspend fun setSpeechServicesConfig(tool: AITool): ToolResult {
         return try {
-            val prefs = SpeechServicesPreferences(context)
+            val profilePrefs = SpeechServiceProfilesPreferences(context)
+            val currentTtsProfile = profilePrefs.getCurrentTtsProfile()
+            val currentSttProfile = profilePrefs.getCurrentSttProfile()
+            val currentTtsServiceType = currentTtsProfile.serviceType
+            val currentTtsHttpConfig = currentTtsProfile.httpConfig
+            val currentTtsVitsConfig = currentTtsProfile.vitsConfig
+            val currentTtsCleanerRegexs = currentTtsProfile.cleanerRegexs
+            val currentTtsSpeechRate = currentTtsProfile.speechRate
+            val currentTtsPitch = currentTtsProfile.pitch
 
-            val currentTtsServiceType = prefs.ttsServiceTypeFlow.first()
-            val currentTtsHttpConfig = prefs.ttsHttpConfigFlow.first()
-            val currentTtsVitsConfig = prefs.ttsVitsPackageConfigFlow.first()
-            val currentTtsCleanerRegexs = prefs.ttsCleanerRegexsFlow.first()
-            val currentTtsSpeechRate = prefs.ttsSpeechRateFlow.first()
-            val currentTtsPitch = prefs.ttsPitchFlow.first()
-
-            val currentSttServiceType = prefs.sttServiceTypeFlow.first()
-            val currentSttHttpConfig = prefs.sttHttpConfigFlow.first()
+            val currentSttServiceType = currentSttProfile.serviceType
+            val currentSttHttpConfig = currentSttProfile.httpConfig
 
             val hasField = { name: String -> tool.parameters.any { it.name == name } }
 
@@ -749,17 +766,21 @@ class StandardSoftwareSettingsModifyTools(private val context: Context) {
                 )
             }
 
-            prefs.saveTtsSettings(
-                serviceType = ttsServiceType,
-                httpConfig = ttsHttpConfig,
-                vitsConfig = ttsVitsConfig,
-                cleanerRegexs = ttsCleanerRegexs,
-                speechRate = ttsSpeechRate,
-                pitch = ttsPitch
+            profilePrefs.updateTtsProfile(
+                currentTtsProfile.copy(
+                    serviceType = ttsServiceType,
+                    httpConfig = ttsHttpConfig,
+                    vitsConfig = ttsVitsConfig,
+                    cleanerRegexs = ttsCleanerRegexs,
+                    speechRate = ttsSpeechRate,
+                    pitch = ttsPitch,
+                ),
             )
-            prefs.saveSttSettings(
-                serviceType = sttServiceType,
-                httpConfig = sttHttpConfig
+            profilePrefs.updateSttProfile(
+                currentSttProfile.copy(
+                    serviceType = sttServiceType,
+                    httpConfig = sttHttpConfig,
+                ),
             )
 
             VoiceServiceFactory.resetInstance()
@@ -806,7 +827,7 @@ class StandardSoftwareSettingsModifyTools(private val context: Context) {
             )
         }
 
-        val prefs = SpeechServicesPreferences(context)
+        val profilePrefs = SpeechServiceProfilesPreferences(context)
         var ttsServiceTypeName = ""
         var providerClass = ""
         var initialized = false
@@ -815,7 +836,8 @@ class StandardSoftwareSettingsModifyTools(private val context: Context) {
         var pitch = 0f
 
         return try {
-            val ttsServiceType = prefs.ttsServiceTypeFlow.first()
+            val ttsProfile = profilePrefs.getCurrentTtsProfile()
+            val ttsServiceType = ttsProfile.serviceType
             ttsServiceTypeName = ttsServiceType.name
             val hasSpeechRateOverride = tool.parameters.any { it.name == "speech_rate" }
             val hasPitchOverride = tool.parameters.any { it.name == "pitch" }
@@ -829,14 +851,14 @@ class StandardSoftwareSettingsModifyTools(private val context: Context) {
                     getParameterValue(tool, "speech_rate")?.trim()?.toFloatOrNull()
                         ?: throw IllegalArgumentException("Invalid number parameter: speech_rate")
                 } else {
-                    prefs.ttsSpeechRateFlow.first()
+                    ttsProfile.speechRate
                 }
             pitch =
                 if (hasPitchOverride) {
                     getParameterValue(tool, "pitch")?.trim()?.toFloatOrNull()
                         ?: throw IllegalArgumentException("Invalid number parameter: pitch")
                 } else {
-                    prefs.ttsPitchFlow.first()
+                    ttsProfile.pitch
                 }
 
             VoiceServiceFactory.resetInstance()
@@ -932,8 +954,6 @@ class StandardSoftwareSettingsModifyTools(private val context: Context) {
         return try {
             val modelConfigManager = ModelConfigManager(context)
             val functionalConfigManager = FunctionalConfigManager(context)
-            modelConfigManager.initializeIfNeeded()
-            functionalConfigManager.initializeIfNeeded()
 
             val configIds = modelConfigManager.configListFlow.first()
             val mappingWithIndex = functionalConfigManager.functionConfigMappingWithIndexFlow.first()
@@ -986,7 +1006,6 @@ class StandardSoftwareSettingsModifyTools(private val context: Context) {
     suspend fun createModelConfig(tool: AITool): ToolResult {
         return try {
             val modelConfigManager = ModelConfigManager(context)
-            modelConfigManager.initializeIfNeeded()
 
             val name =
                 getParameterValue(tool, "name")?.trim().takeUnless { it.isNullOrBlank() }
@@ -1044,8 +1063,6 @@ class StandardSoftwareSettingsModifyTools(private val context: Context) {
         return try {
             val modelConfigManager = ModelConfigManager(context)
             val functionalConfigManager = FunctionalConfigManager(context)
-            modelConfigManager.initializeIfNeeded()
-            functionalConfigManager.initializeIfNeeded()
 
             val current =
                 modelConfigManager.getModelConfig(configId)
@@ -1124,9 +1141,6 @@ class StandardSoftwareSettingsModifyTools(private val context: Context) {
 
         return try {
             val modelConfigManager = ModelConfigManager(context)
-            val functionalConfigManager = FunctionalConfigManager(context)
-            modelConfigManager.initializeIfNeeded()
-            functionalConfigManager.initializeIfNeeded()
 
             val configList = modelConfigManager.configListFlow.first()
             if (!configList.contains(configId)) {
@@ -1138,26 +1152,7 @@ class StandardSoftwareSettingsModifyTools(private val context: Context) {
                 )
             }
 
-            val mappingWithIndex = functionalConfigManager.functionConfigMappingWithIndexFlow.first()
-            val updatedMapping = mappingWithIndex.toMutableMap()
-            val affectedFunctions = mutableListOf<FunctionType>()
-
-            mappingWithIndex.forEach { (functionType, mapping) ->
-                if (mapping.configId == configId) {
-                    updatedMapping[functionType] =
-                        FunctionConfigMapping(
-                            configId = FunctionalConfigManager.DEFAULT_CONFIG_ID,
-                            modelIndex = 0
-                        )
-                    affectedFunctions.add(functionType)
-                }
-            }
-
-            if (affectedFunctions.isNotEmpty()) {
-                functionalConfigManager.saveFunctionConfigMappingWithIndex(updatedMapping)
-            }
-
-            modelConfigManager.deleteConfig(configId)
+            val affectedFunctions = modelConfigManager.deleteConfig(configId)
 
             affectedFunctions
                 .sortedBy { it.name }
@@ -1189,7 +1184,6 @@ class StandardSoftwareSettingsModifyTools(private val context: Context) {
     suspend fun listFunctionModelConfigs(tool: AITool): ToolResult {
         return try {
             val functionalConfigManager = FunctionalConfigManager(context)
-            functionalConfigManager.initializeIfNeeded()
 
             val mappingWithIndex = functionalConfigManager.functionConfigMappingWithIndexFlow.first()
 
@@ -1249,8 +1243,6 @@ class StandardSoftwareSettingsModifyTools(private val context: Context) {
 
             val modelConfigManager = ModelConfigManager(context)
             val functionalConfigManager = FunctionalConfigManager(context)
-            modelConfigManager.initializeIfNeeded()
-            functionalConfigManager.initializeIfNeeded()
 
             val mappingWithIndex = functionalConfigManager.functionConfigMappingWithIndexFlow.first()
             val mapping =
@@ -1328,8 +1320,6 @@ class StandardSoftwareSettingsModifyTools(private val context: Context) {
 
             val modelConfigManager = ModelConfigManager(context)
             val functionalConfigManager = FunctionalConfigManager(context)
-            modelConfigManager.initializeIfNeeded()
-            functionalConfigManager.initializeIfNeeded()
 
             val config =
                 modelConfigManager.getModelConfig(configId)
@@ -1390,7 +1380,6 @@ class StandardSoftwareSettingsModifyTools(private val context: Context) {
             val requestedModelIndex =
                 getOptionalIntParameter(tool, "model_index")?.coerceAtLeast(0) ?: 0
             val modelConfigManager = ModelConfigManager(context)
-            modelConfigManager.initializeIfNeeded()
 
             val config =
                 modelConfigManager.getModelConfig(configId)
@@ -1450,6 +1439,379 @@ class StandardSoftwareSettingsModifyTools(private val context: Context) {
                 success = false,
                 result = StringResultData(""),
                 error = e.message ?: "Failed to test model config connection"
+            )
+        }
+    }
+
+    suspend fun listCharacterCards(tool: AITool): ToolResult {
+        return try {
+            val characterCardManager = CharacterCardManager.getInstance(context)
+            val cards = characterCardManager.getAllCharacterCards()
+            ToolResult(
+                toolName = tool.name,
+                success = true,
+                result =
+                    CharacterCardsResultData(
+                        totalCount = cards.size,
+                        activeCharacterCardId = activeCharacterCardId(characterCardManager),
+                        cards = cards.map(::characterCardToResultItem)
+                    )
+            )
+        } catch (e: Exception) {
+            ToolResult(
+                toolName = tool.name,
+                success = false,
+                result =
+                    CharacterCardsResultData(
+                        totalCount = 0,
+                        activeCharacterCardId = null,
+                        cards = emptyList()
+                    ),
+                error = e.toString()
+            )
+        }
+    }
+
+    suspend fun getCharacterCard(tool: AITool): ToolResult {
+        val characterCardId = getParameterValue(tool, "character_card_id")?.trim().orEmpty()
+        if (characterCardId.isBlank()) {
+            return ToolResult(
+                toolName = tool.name,
+                success = false,
+                result = StringResultData(""),
+                error = "Missing required parameter: character_card_id"
+            )
+        }
+
+        return try {
+            val characterCardManager = CharacterCardManager.getInstance(context)
+            val card = requireCharacterCard(characterCardManager, characterCardId)
+            ToolResult(
+                toolName = tool.name,
+                success = true,
+                result =
+                    CharacterCardResultData(
+                        card = characterCardToResultItem(card),
+                        activeCharacterCardId = activeCharacterCardId(characterCardManager)
+                    )
+            )
+        } catch (e: IllegalArgumentException) {
+            ToolResult(
+                toolName = tool.name,
+                success = false,
+                result = StringResultData(""),
+                error = e.toString()
+            )
+        } catch (e: Exception) {
+            ToolResult(
+                toolName = tool.name,
+                success = false,
+                result = StringResultData(""),
+                error = e.toString()
+            )
+        }
+    }
+
+    suspend fun createCharacterCard(tool: AITool): ToolResult {
+        return try {
+            val (draft, changedFields) =
+                applyCharacterCardUpdates(
+                    tool = tool,
+                    current = CharacterCard(id = "", name = ""),
+                    requireName = true
+                )
+            val characterCardManager = CharacterCardManager.getInstance(context)
+            val characterCardId = characterCardManager.createCharacterCard(draft)
+            val card = requireCharacterCard(characterCardManager, characterCardId)
+            ToolResult(
+                toolName = tool.name,
+                success = true,
+                result =
+                    CharacterCardCreateResultData(
+                        created = true,
+                        card = characterCardToResultItem(card),
+                        activeCharacterCardId = activeCharacterCardId(characterCardManager),
+                        changedFields = changedFields
+                    )
+            )
+        } catch (e: IllegalArgumentException) {
+            ToolResult(
+                toolName = tool.name,
+                success = false,
+                result = StringResultData(""),
+                error = e.toString()
+            )
+        } catch (e: Exception) {
+            ToolResult(
+                toolName = tool.name,
+                success = false,
+                result = StringResultData(""),
+                error = e.toString()
+            )
+        }
+    }
+
+    suspend fun updateCharacterCard(tool: AITool): ToolResult {
+        val characterCardId = getParameterValue(tool, "character_card_id")?.trim().orEmpty()
+        if (characterCardId.isBlank()) {
+            return ToolResult(
+                toolName = tool.name,
+                success = false,
+                result = StringResultData(""),
+                error = "Missing required parameter: character_card_id"
+            )
+        }
+
+        return try {
+            val characterCardManager = CharacterCardManager.getInstance(context)
+            val current = requireCharacterCard(characterCardManager, characterCardId)
+            val (updated, changedFields) =
+                applyCharacterCardUpdates(
+                    tool = tool,
+                    current = current,
+                    requireName = false
+                )
+            if (changedFields.isEmpty()) {
+                throw IllegalArgumentException("At least one character card update field is required")
+            }
+            characterCardManager.updateCharacterCard(updated)
+            val card = requireCharacterCard(characterCardManager, characterCardId)
+            ToolResult(
+                toolName = tool.name,
+                success = true,
+                result =
+                    CharacterCardUpdateResultData(
+                        updated = true,
+                        card = characterCardToResultItem(card),
+                        activeCharacterCardId = activeCharacterCardId(characterCardManager),
+                        changedFields = changedFields
+                    )
+            )
+        } catch (e: IllegalArgumentException) {
+            ToolResult(
+                toolName = tool.name,
+                success = false,
+                result = StringResultData(""),
+                error = e.toString()
+            )
+        } catch (e: Exception) {
+            ToolResult(
+                toolName = tool.name,
+                success = false,
+                result = StringResultData(""),
+                error = e.toString()
+            )
+        }
+    }
+
+    suspend fun deleteCharacterCard(tool: AITool): ToolResult {
+        val characterCardId = getParameterValue(tool, "character_card_id")?.trim().orEmpty()
+        if (characterCardId.isBlank()) {
+            return ToolResult(
+                toolName = tool.name,
+                success = false,
+                result = StringResultData(""),
+                error = "Missing required parameter: character_card_id"
+            )
+        }
+
+        if (characterCardId == CharacterCardManager.DEFAULT_CHARACTER_CARD_ID) {
+            return ToolResult(
+                toolName = tool.name,
+                success = false,
+                result = StringResultData(""),
+                error = "The default character card cannot be deleted"
+            )
+        }
+
+        return try {
+            val characterCardManager = CharacterCardManager.getInstance(context)
+            requireCharacterCard(characterCardManager, characterCardId)
+            characterCardManager.deleteCharacterCard(characterCardId)
+            ToolResult(
+                toolName = tool.name,
+                success = true,
+                result =
+                    CharacterCardDeleteResultData(
+                        deleted = true,
+                        characterCardId = characterCardId,
+                        activeCharacterCardId = activeCharacterCardId(characterCardManager)
+                    )
+            )
+        } catch (e: IllegalArgumentException) {
+            ToolResult(
+                toolName = tool.name,
+                success = false,
+                result = StringResultData(""),
+                error = e.toString()
+            )
+        } catch (e: Exception) {
+            ToolResult(
+                toolName = tool.name,
+                success = false,
+                result = StringResultData(""),
+                error = e.toString()
+            )
+        }
+    }
+
+    suspend fun setActiveCharacterCard(tool: AITool): ToolResult {
+        val characterCardId = getParameterValue(tool, "character_card_id")?.trim().orEmpty()
+        if (characterCardId.isBlank()) {
+            return ToolResult(
+                toolName = tool.name,
+                success = false,
+                result = StringResultData(""),
+                error = "Missing required parameter: character_card_id"
+            )
+        }
+
+        return try {
+            val characterCardManager = CharacterCardManager.getInstance(context)
+            requireCharacterCard(characterCardManager, characterCardId)
+            characterCardManager.setActiveCharacterCard(characterCardId)
+            ToolResult(
+                toolName = tool.name,
+                success = true,
+                result =
+                    CharacterCardActivationResultData(
+                        activeCharacterCardId = activeCharacterCardId(characterCardManager)
+                    )
+            )
+        } catch (e: IllegalArgumentException) {
+            ToolResult(
+                toolName = tool.name,
+                success = false,
+                result = StringResultData(""),
+                error = e.toString()
+            )
+        } catch (e: Exception) {
+            ToolResult(
+                toolName = tool.name,
+                success = false,
+                result = StringResultData(""),
+                error = e.toString()
+            )
+        }
+    }
+
+    suspend fun clearActiveCharacterCard(tool: AITool): ToolResult {
+        return try {
+            val characterCardManager = CharacterCardManager.getInstance(context)
+            characterCardManager.clearActiveCharacterCard()
+            ToolResult(
+                toolName = tool.name,
+                success = true,
+                result = CharacterCardActivationResultData(activeCharacterCardId = null)
+            )
+        } catch (e: Exception) {
+            ToolResult(
+                toolName = tool.name,
+                success = false,
+                result = StringResultData(""),
+                error = e.toString()
+            )
+        }
+    }
+
+    suspend fun importCharacterCardFromTavernJson(tool: AITool): ToolResult {
+        val tavernJson = getParameterValue(tool, "tavern_json")?.takeIf { it.isNotBlank() }
+        if (tavernJson == null) {
+            return ToolResult(
+                toolName = tool.name,
+                success = false,
+                result = StringResultData(""),
+                error = "Missing required parameter: tavern_json"
+            )
+        }
+
+        return try {
+            val characterCardManager = CharacterCardManager.getInstance(context)
+            val importResult = characterCardManager.createCharacterCardFromTavernJson(tavernJson)
+            if (importResult.isFailure) {
+                val importError = importResult.exceptionOrNull()?.toString()
+                return ToolResult(
+                    toolName = tool.name,
+                    success = false,
+                    result = StringResultData(""),
+                    error = importError
+                )
+            }
+            val characterCardId = importResult.getOrThrow()
+            val card = requireCharacterCard(characterCardManager, characterCardId)
+            ToolResult(
+                toolName = tool.name,
+                success = true,
+                result =
+                    CharacterCardImportResultData(
+                        imported = true,
+                        card = characterCardToResultItem(card),
+                        activeCharacterCardId = activeCharacterCardId(characterCardManager)
+                    )
+            )
+        } catch (e: IllegalArgumentException) {
+            ToolResult(
+                toolName = tool.name,
+                success = false,
+                result = StringResultData(""),
+                error = e.toString()
+            )
+        } catch (e: Exception) {
+            ToolResult(
+                toolName = tool.name,
+                success = false,
+                result = StringResultData(""),
+                error = e.toString()
+            )
+        }
+    }
+
+    suspend fun exportCharacterCardToTavernJson(tool: AITool): ToolResult {
+        val characterCardId = getParameterValue(tool, "character_card_id")?.trim().orEmpty()
+        if (characterCardId.isBlank()) {
+            return ToolResult(
+                toolName = tool.name,
+                success = false,
+                result = StringResultData(""),
+                error = "Missing required parameter: character_card_id"
+            )
+        }
+
+        return try {
+            val characterCardManager = CharacterCardManager.getInstance(context)
+            requireCharacterCard(characterCardManager, characterCardId)
+            val exportResult = characterCardManager.exportCharacterCardToTavernJson(characterCardId)
+            if (exportResult.isFailure) {
+                val exportError = exportResult.exceptionOrNull()?.toString()
+                return ToolResult(
+                    toolName = tool.name,
+                    success = false,
+                    result = StringResultData(""),
+                    error = exportError
+                )
+            }
+            ToolResult(
+                toolName = tool.name,
+                success = true,
+                result =
+                    CharacterCardExportResultData(
+                        characterCardId = characterCardId,
+                        tavernJson = exportResult.getOrThrow()
+                    )
+            )
+        } catch (e: IllegalArgumentException) {
+            ToolResult(
+                toolName = tool.name,
+                success = false,
+                result = StringResultData(""),
+                error = e.toString()
+            )
+        } catch (e: Exception) {
+            ToolResult(
+                toolName = tool.name,
+                success = false,
+                result = StringResultData(""),
+                error = e.toString()
             )
         }
     }
@@ -1549,6 +1911,198 @@ class StandardSoftwareSettingsModifyTools(private val context: Context) {
                     hasFailures -> "Some MCP plugins failed to start"
                     else -> null
                 }
+        )
+    }
+
+    private suspend fun activeCharacterCardId(
+        characterCardManager: CharacterCardManager
+    ): String? {
+        return characterCardManager.observeActiveCharacterCardId().first()
+    }
+
+    private suspend fun requireCharacterCard(
+        characterCardManager: CharacterCardManager,
+        characterCardId: String
+    ): CharacterCard {
+        return characterCardManager
+            .getAllCharacterCards()
+            .firstOrNull { card -> card.id == characterCardId }
+            ?: throw IllegalArgumentException("Character card not found: $characterCardId")
+    }
+
+    private fun applyCharacterCardUpdates(
+        tool: AITool,
+        current: CharacterCard,
+        requireName: Boolean
+    ): Pair<CharacterCard, List<String>> {
+        var updated = current
+        val changedFields = mutableListOf<String>()
+
+        fun applyText(name: String, transform: (CharacterCard, String) -> CharacterCard) {
+            val value = getParameterValue(tool, name) ?: return
+            updated = transform(updated, value)
+            changedFields.add(name)
+        }
+
+        getParameterValue(tool, "name")?.let { rawName ->
+            val name = rawName.trim()
+            if (name.isBlank()) {
+                throw IllegalArgumentException("Character card name cannot be blank")
+            }
+            updated = updated.copy(name = name)
+            changedFields.add("name")
+        }
+        if (requireName && updated.name.isBlank()) {
+            throw IllegalArgumentException("Missing required parameter: name")
+        }
+
+        applyText("description") { card, value -> card.copy(description = value) }
+        applyText("character_setting") { card, value -> card.copy(characterSetting = value) }
+        applyText("opening_statement") { card, value -> card.copy(openingStatement = value) }
+        applyText("other_content_chat") { card, value -> card.copy(otherContentChat = value) }
+        applyText("other_content_voice") { card, value -> card.copy(otherContentVoice = value) }
+        applyText("advanced_custom_prompt") { card, value -> card.copy(advancedCustomPrompt = value) }
+        applyText("marks") { card, value -> card.copy(marks = value) }
+
+        getParameterValue(tool, "attached_tag_ids")?.let { raw ->
+            updated = updated.copy(
+                attachedTagIds = parseStringArrayParameter(raw, "attached_tag_ids")
+            )
+            changedFields.add("attached_tag_ids")
+        }
+
+        getParameterValue(tool, "chat_model_binding_mode")?.let { raw ->
+            val mode = parseCharacterCardChatModelBindingMode(raw)
+            updated = updated.copy(chatModelBindingMode = mode)
+            changedFields.add("chat_model_binding_mode")
+        }
+        getParameterValue(tool, "chat_model_config_id")?.let { raw ->
+            updated = updated.copy(chatModelConfigId = raw.trim().takeIf { it.isNotEmpty() })
+            changedFields.add("chat_model_config_id")
+        }
+        getParameterValue(tool, "chat_model_index")?.let { raw ->
+            val index = raw.trim().toIntOrNull()
+                ?: throw IllegalArgumentException("Invalid integer parameter: chat_model_index")
+            if (index < 0) {
+                throw IllegalArgumentException("chat_model_index must be greater than or equal to 0")
+            }
+            updated = updated.copy(chatModelIndex = index)
+            changedFields.add("chat_model_index")
+        }
+        getParameterValue(tool, "memory_profile_binding_mode")?.let { raw ->
+            val mode = parseCharacterCardMemoryProfileBindingMode(raw)
+            updated = updated.copy(memoryProfileBindingMode = mode)
+            changedFields.add("memory_profile_binding_mode")
+        }
+        getParameterValue(tool, "memory_profile_id")?.let { raw ->
+            updated = updated.copy(memoryProfileId = raw.trim().takeIf { it.isNotEmpty() })
+            changedFields.add("memory_profile_id")
+        }
+
+        var toolAccessConfig = updated.toolAccessConfig
+        getParameterValue(tool, "tool_access_enabled")?.let { raw ->
+            val enabled = parseBooleanParameter(raw)
+                ?: throw IllegalArgumentException("Invalid boolean parameter: tool_access_enabled")
+            toolAccessConfig = toolAccessConfig.copy(enabled = enabled)
+            changedFields.add("tool_access_enabled")
+        }
+        getParameterValue(tool, "allowed_builtin_tools")?.let { raw ->
+            toolAccessConfig = toolAccessConfig.copy(
+                allowedBuiltinTools = parseStringArrayParameter(raw, "allowed_builtin_tools")
+            )
+            changedFields.add("allowed_builtin_tools")
+        }
+        getParameterValue(tool, "allowed_packages")?.let { raw ->
+            toolAccessConfig = toolAccessConfig.copy(
+                allowedPackages = parseStringArrayParameter(raw, "allowed_packages")
+            )
+            changedFields.add("allowed_packages")
+        }
+        getParameterValue(tool, "allowed_skills")?.let { raw ->
+            toolAccessConfig = toolAccessConfig.copy(
+                allowedSkills = parseStringArrayParameter(raw, "allowed_skills")
+            )
+            changedFields.add("allowed_skills")
+        }
+        getParameterValue(tool, "allowed_mcp_servers")?.let { raw ->
+            toolAccessConfig = toolAccessConfig.copy(
+                allowedMcpServers = parseStringArrayParameter(raw, "allowed_mcp_servers")
+            )
+            changedFields.add("allowed_mcp_servers")
+        }
+        if (toolAccessConfig != updated.toolAccessConfig) {
+            updated = updated.copy(toolAccessConfig = toolAccessConfig.normalized())
+        }
+
+        return updated to changedFields.distinct()
+    }
+
+    private fun parseCharacterCardChatModelBindingMode(value: String): String {
+        return when (value.trim().uppercase()) {
+            CharacterCardChatModelBindingMode.FOLLOW_GLOBAL ->
+                CharacterCardChatModelBindingMode.FOLLOW_GLOBAL
+            CharacterCardChatModelBindingMode.FIXED_CONFIG ->
+                CharacterCardChatModelBindingMode.FIXED_CONFIG
+            else -> throw IllegalArgumentException("Invalid chat_model_binding_mode: $value")
+        }
+    }
+
+    private fun parseCharacterCardMemoryProfileBindingMode(value: String): String {
+        return when (value.trim().uppercase()) {
+            CharacterCardMemoryProfileBindingMode.FOLLOW_GLOBAL ->
+                CharacterCardMemoryProfileBindingMode.FOLLOW_GLOBAL
+            CharacterCardMemoryProfileBindingMode.FIXED_PROFILE ->
+                CharacterCardMemoryProfileBindingMode.FIXED_PROFILE
+            else -> throw IllegalArgumentException("Invalid memory_profile_binding_mode: $value")
+        }
+    }
+
+    private fun parseStringArrayParameter(raw: String, parameterName: String): List<String> {
+        val array = try {
+            JSONArray(raw)
+        } catch (e: Exception) {
+            throw IllegalArgumentException("Invalid JSON array parameter: $parameterName")
+        }
+        return (0 until array.length()).map { index ->
+            val value = array.get(index)
+            if (value !is String) {
+                throw IllegalArgumentException(
+                    "Invalid JSON array parameter: $parameterName[$index] must be a string"
+                )
+            }
+            value.trim()
+        }.filter { value -> value.isNotEmpty() }.distinct()
+    }
+
+    private fun characterCardToResultItem(card: CharacterCard): CharacterCardResultItem {
+        val toolAccessConfig = card.toolAccessConfig.normalized()
+        return CharacterCardResultItem(
+            id = card.id,
+            name = card.name,
+            description = card.description,
+            characterSetting = card.characterSetting,
+            openingStatement = card.openingStatement,
+            otherContentChat = card.otherContentChat,
+            otherContentVoice = card.otherContentVoice,
+            attachedTagIds = card.attachedTagIds,
+            advancedCustomPrompt = card.advancedCustomPrompt,
+            marks = card.marks,
+            chatModelBindingMode = card.chatModelBindingMode,
+            chatModelConfigId = card.chatModelConfigId,
+            chatModelIndex = card.chatModelIndex,
+            memoryProfileBindingMode = card.memoryProfileBindingMode,
+            memoryProfileId = card.memoryProfileId,
+            toolAccessConfig =
+                CharacterCardToolAccessConfigResultItem(
+                    enabled = toolAccessConfig.enabled,
+                    allowedBuiltinTools = toolAccessConfig.allowedBuiltinTools,
+                    allowedPackages = toolAccessConfig.allowedPackages,
+                    allowedSkills = toolAccessConfig.allowedSkills,
+                    allowedMcpServers = toolAccessConfig.allowedMcpServers
+                ),
+            isDefault = card.isDefault,
+            createdAt = card.createdAt,
+            updatedAt = card.updatedAt
         )
     }
 

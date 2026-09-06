@@ -6,6 +6,7 @@
  */
 
 import { BaseResult } from './core';
+import type { ToolPkg } from './toolpkg';
 
 // ============================================================================
 // Calculation and Date Result Types
@@ -1553,6 +1554,10 @@ export interface ChatInfo {
     outputTokens: number;
     /** Bound character card name (if any) */
     characterCardName?: string | null;
+    /** ID of the character card bound to this chat, resolved from characterCardName */
+    characterCardId?: string | null;
+    /** Bound character group ID, set only for group chats */
+    characterGroupId?: string | null;
 }
 
 /**
@@ -1682,6 +1687,31 @@ export interface ChatMessagesResultData {
 }
 
 /**
+ * Function model call finish reason.
+ *
+ * @since ToolPkg API 1.0.1
+ */
+export type ChatCallFinishReason = 'stop' | 'tool_call';
+
+/**
+ * Function model call result data.
+ *
+ * `text` contains assistant text with protocol metadata and tool XML removed.
+ * `turns` preserves assistant text and model-emitted tool calls as PromptTurn-shaped records.
+ * `metadata.protocolMeta` contains provider protocol entries with `provider` and raw `payload`.
+ *
+ * @since ToolPkg API 1.0.1
+ */
+export interface ChatCallResultData {
+    text: string;
+    turns: ToolPkg.PromptTurn[];
+    finishReason: ChatCallFinishReason;
+    metadata: ToolPkg.JsonObject;
+    receivedAt: number;
+    toString(): string;
+}
+
+/**
  * Character card list result data
  */
 export interface CharacterCardListResultData {
@@ -1700,6 +1730,94 @@ export interface CharacterCardInfo {
     isDefault: boolean;
     createdAt: number;
     updatedAt: number;
+}
+
+/** Full character-card tool access configuration. */
+export interface CharacterCardToolAccessConfigResultItem {
+    enabled: boolean;
+    allowedBuiltinTools: string[];
+    allowedPackages: string[];
+    allowedSkills: string[];
+    allowedMcpServers: string[];
+}
+
+/** Full character-card configuration. */
+export interface CharacterCardResultItem {
+    id: string;
+    name: string;
+    description: string;
+    characterSetting: string;
+    openingStatement: string;
+    otherContentChat: string;
+    otherContentVoice: string;
+    attachedTagIds: string[];
+    advancedCustomPrompt: string;
+    marks: string;
+    chatModelBindingMode: 'FOLLOW_GLOBAL' | 'FIXED_CONFIG';
+    chatModelConfigId: string | null;
+    chatModelIndex: number;
+    memoryProfileBindingMode: 'FOLLOW_GLOBAL' | 'FIXED_PROFILE';
+    memoryProfileId: string | null;
+    toolAccessConfig: CharacterCardToolAccessConfigResultItem;
+    isDefault: boolean;
+    createdAt: number;
+    updatedAt: number;
+}
+
+/** Full character-card list and active card state. */
+export interface CharacterCardsResultData {
+    totalCount: number;
+    activeCharacterCardId: string | null;
+    cards: CharacterCardResultItem[];
+    toString(): string;
+}
+
+/** One full character-card result. */
+export interface CharacterCardResultData {
+    card: CharacterCardResultItem;
+    activeCharacterCardId: string | null;
+    toString(): string;
+}
+
+export interface CharacterCardCreateResultData {
+    created: boolean;
+    card: CharacterCardResultItem;
+    activeCharacterCardId: string | null;
+    changedFields: string[];
+    toString(): string;
+}
+
+export interface CharacterCardUpdateResultData {
+    updated: boolean;
+    card: CharacterCardResultItem;
+    activeCharacterCardId: string | null;
+    changedFields: string[];
+    toString(): string;
+}
+
+export interface CharacterCardDeleteResultData {
+    deleted: boolean;
+    characterCardId: string;
+    activeCharacterCardId: string | null;
+    toString(): string;
+}
+
+export interface CharacterCardActivationResultData {
+    activeCharacterCardId: string | null;
+    toString(): string;
+}
+
+export interface CharacterCardImportResultData {
+    imported: boolean;
+    card: CharacterCardResultItem;
+    activeCharacterCardId: string | null;
+    toString(): string;
+}
+
+export interface CharacterCardExportResultData {
+    characterCardId: string;
+    tavernJson: string;
+    toString(): string;
 }
 
 /**

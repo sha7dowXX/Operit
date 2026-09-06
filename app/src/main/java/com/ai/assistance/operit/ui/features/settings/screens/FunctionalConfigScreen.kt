@@ -489,17 +489,24 @@ fun FunctionConfigCard(
                                                             "user" to "Connection test: summarize this short dialog.",
                                                             "assistant" to "Sure, I can help with summaries."
                                                         )
-                                                    enhancedService.generateSummary(sampleMessages)
+                                                    enhancedService.generateSummary(
+                                                        sampleMessages,
+                                                        recordTokenUsage = false,
+                                                    )
                                                 }
                                                 FunctionType.TITLE_GENERATION -> {
                                                     val enhancedService = EnhancedAIService.getInstance(context)
                                                     enhancedService.generateConversationTitle(
-                                                        userText = context.getString(R.string.functional_config_test_title_generation_user_text)
+                                                        userText = context.getString(R.string.functional_config_test_title_generation_user_text),
+                                                        recordTokenUsage = false,
                                                     )
                                                 }
                                                 FunctionType.TRANSLATION -> {
                                                     val enhancedService = EnhancedAIService.getInstance(context)
-                                                    enhancedService.translateText("Connection test: translate me.")
+                                                    enhancedService.translateText(
+                                                        "Connection test: translate me.",
+                                                        recordTokenUsage = false,
+                                                    )
                                                 }
                                                 FunctionType.IMAGE_RECOGNITION -> {
                                                     val imageFile = AssetCopyUtils.copyAssetToCache(context, "test/1.jpg")
@@ -525,7 +532,8 @@ fun FunctionConfigCard(
                                                         listOf(PromptTurn(kind = PromptTurnKind.USER, content = prompt)),
                                                         parameters,
                                                         stream = false,
-                                                        enableRetry = false
+                                                        enableRetry = false,
+                                                        recordTokenUsage = false,
                                                     )
                                                         .collect { chunk -> buffer.append(chunk) }
                                                     buffer.toString()
@@ -554,7 +562,8 @@ fun FunctionConfigCard(
                                                         listOf(PromptTurn(kind = PromptTurnKind.USER, content = prompt)),
                                                         parameters,
                                                         stream = false,
-                                                        enableRetry = false
+                                                        enableRetry = false,
+                                                        recordTokenUsage = false,
                                                     )
                                                         .collect { chunk -> buffer.append(chunk) }
                                                     buffer.toString()
@@ -583,7 +592,8 @@ fun FunctionConfigCard(
                                                         listOf(PromptTurn(kind = PromptTurnKind.USER, content = prompt)),
                                                         parameters,
                                                         stream = false,
-                                                        enableRetry = false
+                                                        enableRetry = false,
+                                                        recordTokenUsage = false,
                                                     )
                                                         .collect { chunk -> buffer.append(chunk) }
                                                     buffer.toString()
@@ -605,7 +615,8 @@ fun FunctionConfigCard(
                                                         listOf(PromptTurn(kind = PromptTurnKind.USER, content = prompt)),
                                                         parameters,
                                                         stream = false,
-                                                        enableRetry = false
+                                                        enableRetry = false,
+                                                        recordTokenUsage = false,
                                                     )
                                                         .collect { chunk -> buffer.append(chunk) }
                                                     buffer.toString()
@@ -625,7 +636,8 @@ fun FunctionConfigCard(
                                                         ),
                                                         parameters,
                                                         stream = false,
-                                                        enableRetry = false
+                                                        enableRetry = false,
+                                                        recordTokenUsage = false,
                                                     ).collect { chunk -> buffer.append(chunk) }
                                                     buffer.toString()
                                                 }
@@ -639,7 +651,8 @@ fun FunctionConfigCard(
                                                             duplicatesPromptPart = "",
                                                             existingMemoriesPrompt = existingMemoriesPrompt,
                                                             existingFoldersPrompt = existingFoldersPrompt,
-                                                            useEnglish = useEnglish
+                                                            useEnglish = useEnglish,
+                                                            memoryExtractionCustomRules = ""
                                                         )
                                                     val userPrompt =
                                                         context.getString(R.string.functional_config_test_memory_prompt)
@@ -654,7 +667,8 @@ fun FunctionConfigCard(
                                                         ),
                                                         parameters,
                                                         stream = false,
-                                                        enableRetry = false
+                                                        enableRetry = false,
+                                                        recordTokenUsage = false,
                                                     ).collect { chunk -> buffer.append(chunk) }
                                                     buffer.toString()
                                                 }
@@ -667,7 +681,8 @@ fun FunctionConfigCard(
                                                         listOf(PromptTurn(kind = PromptTurnKind.USER, content = "Hi")),
                                                         parameters,
                                                         stream = false,
-                                                        enableRetry = false
+                                                        enableRetry = false,
+                                                        recordTokenUsage = false,
                                                     )
                                                         .collect { chunk -> buffer.append(chunk) }
                                                     buffer.toString()
@@ -683,7 +698,8 @@ fun FunctionConfigCard(
                                                         listOf(PromptTurn(kind = PromptTurnKind.USER, content = prompt)),
                                                         parameters,
                                                         stream = false,
-                                                        enableRetry = false
+                                                        enableRetry = false,
+                                                        recordTokenUsage = false,
                                                     )
                                                         .collect { chunk -> buffer.append(chunk) }
                                                     buffer.toString()

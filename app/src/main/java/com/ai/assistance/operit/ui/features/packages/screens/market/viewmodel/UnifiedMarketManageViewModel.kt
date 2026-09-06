@@ -11,8 +11,6 @@ import com.ai.assistance.operit.data.api.MarketV2Entry
 import com.ai.assistance.operit.data.api.MarketV2PublisherEntrySummary
 import com.ai.assistance.operit.data.preferences.GitHubAuthPreferences
 import com.ai.assistance.operit.ui.features.packages.market.MarketStatsType
-import com.ai.assistance.operit.ui.features.packages.market.MarketReviewState
-import com.ai.assistance.operit.ui.features.packages.market.resolveMarketReviewSnapshot
 import com.ai.assistance.operit.util.AppLogger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -52,9 +50,6 @@ class UnifiedMarketManageViewModel(
 
     private val _hasLoaded = MutableStateFlow(false)
     val hasLoaded: StateFlow<Boolean> = _hasLoaded.asStateFlow()
-
-    private val _resubmittingEntryId = MutableStateFlow<String?>(null)
-    val resubmittingEntryId: StateFlow<String?> = _resubmittingEntryId.asStateFlow()
 
     val isLoggedIn: StateFlow<Boolean> =
         githubAuth.isLoggedInFlow.stateIn(
@@ -97,7 +92,6 @@ class UnifiedMarketManageViewModel(
                             .distinctBy { it.id }
                             .sortedByDescending { it.updatedAt }
                     }
-                recordVisibleReviewLocks(loaded)
                 _entries.value = loaded
             } catch (e: Exception) {
                 _errorMessage.value = e.message ?: context.getString(R.string.market_error_load_failed)
@@ -164,30 +158,21 @@ class UnifiedMarketManageViewModel(
         )
     }
 
-    fun resubmitEntry(entry: MarketV2PublisherEntrySummary) {
-        val blockMessage = resolveResubmitBlockMessage(entry)
-        if (blockMessage != null) {
-            _errorMessage.value = blockMessage
-            Toast.makeText(context, blockMessage, Toast.LENGTH_SHORT).show()
-            return
-        }
-
-        updateEntryState(
-            entry = entry,
-            stateCode = "pending",
-            action = { marketStatsApiService.resubmitEntry(entry.id) },
-            successMessage = context.getString(R.string.market_manage_resubmitted, entry.title),
-            loadingEntryId = entry.id
+    fun openEntryForRevision(
+        entry: MarketV2PublisherEntrySummary,
+        onLoaded: (MarketV2Entry) -> Unit
+    ) {
+        AppLogger.i(
+            TAG,
+            "revision_gate click entryId=${entry.id} stateCode=${entry.stateCode} " +
+                "updatedAt=${entry.updatedAt} next=getMyEntryDetail"
         )
+        openOwnedEntryDetail(entry, onLoaded)
     }
 
-    private fun updateEntryState(
+    fun openOwnedEntryDetail(
         entry: MarketV2PublisherEntrySummary,
-        stateCode: String,
-        action: suspend () -> Result<MarketV2Entry>,
-        successMessage: String,
-        onSuccess: (() -> Unit)? = null,
-        loadingEntryId: String? = null
+        onLoaded: (MarketV2Entry) -> Unit
     ) {
         viewModelScope.launch {
             if (!githubAuth.isLoggedIn()) {
@@ -200,9 +185,39 @@ class UnifiedMarketManageViewModel(
             }
 
             _isLoading.value = true
-            if (loadingEntryId != null) {
-                _resubmittingEntryId.value = loadingEntryId
+            _errorMessage.value = null
+            try {
+                val fullEntry =
+                    withContext(Dispatchers.IO) {
+                        marketStatsApiService.getMyEntryDetail(entry.id).getOrThrow()
+                    }
+                onLoaded(fullEntry)
+            } catch (e: Exception) {
+                _errorMessage.value = e.message ?: context.getString(R.string.market_error_load_failed)
+                AppLogger.e(TAG, "Failed to load owner detail for managed market entry ${entry.id}", e)
+            } finally {
+                _isLoading.value = false
             }
+        }
+    }
+
+    private fun updateEntryState(
+        entry: MarketV2PublisherEntrySummary,
+        stateCode: String,
+        action: suspend () -> Result<MarketV2Entry>,
+        successMessage: String
+    ) {
+        viewModelScope.launch {
+            if (!githubAuth.isLoggedIn()) {
+                _errorMessage.value = context.getString(R.string.skillmarket_github_login_required)
+                return@launch
+            }
+            if (entry.id.isBlank()) {
+                _errorMessage.value = context.getString(R.string.skillmarket_remove_failed, "entry not found")
+                return@launch
+            }
+
+            _isLoading.value = true
             _errorMessage.value = null
             try {
                 action().fold(
@@ -211,7 +226,6 @@ class UnifiedMarketManageViewModel(
                             _entries.value.map { existing ->
                                 if (existing.id == entry.id) existing.copy(stateCode = stateCode) else existing
                             }
-                        onSuccess?.invoke()
                         Toast.makeText(context, successMessage, Toast.LENGTH_SHORT).show()
                     },
                     onFailure = { error ->
@@ -222,83 +236,8 @@ class UnifiedMarketManageViewModel(
                 _errorMessage.value = e.message ?: context.getString(R.string.market_error_action_failed)
                 AppLogger.e(TAG, "Failed to update managed market entry", e)
             } finally {
-                if (loadingEntryId != null && _resubmittingEntryId.value == loadingEntryId) {
-                    _resubmittingEntryId.value = null
-                }
                 _isLoading.value = false
             }
-        }
-    }
-
-    private fun resolveResubmitBlockMessage(entry: MarketV2PublisherEntrySummary): String? {
-        val review = entry.resolveMarketReviewSnapshot()
-        if (review.state == MarketReviewState.REJECTED || resubmitPreferences().getBoolean(rejectedKey(entry.id), false)) {
-            return context.getString(R.string.market_manage_resubmit_rejected_blocked)
-        }
-        if (review.state != MarketReviewState.CHANGES_REQUESTED) {
-            return context.getString(R.string.market_manage_resubmit_state_blocked)
-        }
-
-        val cooldownUntil = getResubmitCooldownUntil(entry)
-        val now = System.currentTimeMillis()
-        if (cooldownUntil > now) {
-            return context.getString(
-                R.string.market_manage_resubmit_cooldown_message,
-                formatRemainingCooldown(cooldownUntil - now)
-            )
-        }
-        return null
-    }
-
-    private fun recordVisibleReviewLocks(entries: List<MarketV2PublisherEntrySummary>) {
-        val preferences = resubmitPreferences()
-        val editor = preferences.edit()
-        for (entry in entries) {
-            when (entry.resolveMarketReviewSnapshot().state) {
-                MarketReviewState.CHANGES_REQUESTED -> {
-                    val key = cooldownKey(entry)
-                    if (!preferences.contains(key)) {
-                        editor.putLong(key, reviewCooldownUntil(entry))
-                    }
-                }
-                MarketReviewState.REJECTED -> {
-                    editor.putBoolean(rejectedKey(entry.id), true)
-                }
-                MarketReviewState.PENDING,
-                MarketReviewState.APPROVED,
-                MarketReviewState.WITHDRAWN -> Unit
-            }
-        }
-        editor.apply()
-    }
-
-    private fun getResubmitCooldownUntil(entry: MarketV2PublisherEntrySummary): Long {
-        return resubmitPreferences().getLong(cooldownKey(entry), 0L)
-    }
-
-    private fun reviewCooldownUntil(entry: MarketV2PublisherEntrySummary): Long {
-        return java.time.Instant.parse(entry.updatedAt).toEpochMilli() + RESUBMIT_COOLDOWN_MILLIS
-    }
-
-    private fun resubmitPreferences() =
-        context.getSharedPreferences(RESUBMIT_PREFS_NAME, Context.MODE_PRIVATE)
-
-    private fun cooldownKey(entry: MarketV2PublisherEntrySummary): String {
-        return "changes_requested_until_${entry.id}_${entry.updatedAt}"
-    }
-
-    private fun rejectedKey(entryId: String): String {
-        return "rejected_$entryId"
-    }
-
-    private fun formatRemainingCooldown(remainingMillis: Long): String {
-        val totalMinutes = ((remainingMillis + 59_999L) / 60_000L).coerceAtLeast(1L)
-        val hours = totalMinutes / 60L
-        val minutes = totalMinutes % 60L
-        return when {
-            hours > 0L && minutes > 0L -> "${hours}小时${minutes}分钟"
-            hours > 0L -> "${hours}小时"
-            else -> "${minutes}分钟"
         }
     }
 
@@ -317,8 +256,6 @@ class UnifiedMarketManageViewModel(
 
     companion object {
         private const val TAG = "UnifiedMarketManageViewModel"
-        private const val RESUBMIT_PREFS_NAME = "market_resubmit_cooldowns"
-        private const val RESUBMIT_COOLDOWN_MILLIS = 12L * 60L * 60L * 1000L
     }
 }
 

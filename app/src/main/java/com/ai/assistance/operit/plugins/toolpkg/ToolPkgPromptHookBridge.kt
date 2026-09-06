@@ -167,11 +167,24 @@ internal object ToolPkgPromptHookBridge {
         }
 
         val manager = toolPkgPackageManager()
+        val budget = ToolPkgHookExecutionBudget.create()
         var current = context
-        hooks.forEach { hook ->
+        for (hook in hooks) {
             val resolvedHookId = hook.hookId
             val resolvedContainer = hook.containerPackageName
             val resolvedFunction = hook.functionName
+            val timeoutMillis = budget.remainingMillis()
+            if (timeoutMillis == null) {
+                budget.logDeadlineReached(
+                    tag = TAG,
+                    stage = current.stage,
+                    containerPackageName = resolvedContainer,
+                    hookId = resolvedHookId
+                )
+                // Preserve the package and Hook ID so the existing floating Toast names the exact plugin.
+                current.onHookTimeout?.invoke("$resolvedContainer:$resolvedHookId")
+                break
+            }
             val result =
                 manager.runToolPkgMainHook(
                     containerPackageName = resolvedContainer,
@@ -180,8 +193,21 @@ internal object ToolPkgPromptHookBridge {
                     eventName = current.stage,
                     pluginId = resolvedHookId,
                     inlineFunctionSource = hook.functionSource,
-                    eventPayload = buildPromptEventPayload(current)
+                    eventPayload = buildPromptEventPayload(current),
+                    timeoutMillis = timeoutMillis
                 )
+            if (
+                budget.logTimeoutIfPresent(
+                    result = result,
+                    tag = TAG,
+                    stage = current.stage,
+                    containerPackageName = resolvedContainer,
+                    hookId = resolvedHookId
+                )
+            ) {
+                current.onHookTimeout?.invoke("$resolvedContainer:$resolvedHookId")
+                break
+            }
             val decoded =
                 result.getOrElse { error ->
                     AppLogger.e(
@@ -201,7 +227,7 @@ internal object ToolPkgPromptHookBridge {
                             null
                         }
                 }
-            val mutation = parseMutation(decoded, current) ?: return@forEach
+            val mutation = parseMutation(decoded, current) ?: continue
             current = applyMutation(current, mutation)
         }
 
@@ -228,11 +254,10 @@ internal object ToolPkgPromptHookBridge {
                         functionSource = hook.functionSource
                     )
                 }
-            }.sortedWith(
-                compareBy(
-                    ToolPkgPromptHookRegistration::containerPackageName,
-                    ToolPkgPromptHookRegistration::hookId
-                )
+            }.sortedByToolPkgLoadOrder(
+                activeContainers = activeContainers,
+                containerPackageName = ToolPkgPromptHookRegistration::containerPackageName,
+                registrationId = ToolPkgPromptHookRegistration::hookId
             )
 
         promptHistoryHooks =
@@ -245,11 +270,10 @@ internal object ToolPkgPromptHookBridge {
                         functionSource = hook.functionSource
                     )
                 }
-            }.sortedWith(
-                compareBy(
-                    ToolPkgPromptHookRegistration::containerPackageName,
-                    ToolPkgPromptHookRegistration::hookId
-                )
+            }.sortedByToolPkgLoadOrder(
+                activeContainers = activeContainers,
+                containerPackageName = ToolPkgPromptHookRegistration::containerPackageName,
+                registrationId = ToolPkgPromptHookRegistration::hookId
             )
 
         promptEstimateHistoryHooks =
@@ -262,11 +286,10 @@ internal object ToolPkgPromptHookBridge {
                         functionSource = hook.functionSource
                     )
                 }
-            }.sortedWith(
-                compareBy(
-                    ToolPkgPromptHookRegistration::containerPackageName,
-                    ToolPkgPromptHookRegistration::hookId
-                )
+            }.sortedByToolPkgLoadOrder(
+                activeContainers = activeContainers,
+                containerPackageName = ToolPkgPromptHookRegistration::containerPackageName,
+                registrationId = ToolPkgPromptHookRegistration::hookId
             )
 
         systemPromptComposeHooks =
@@ -279,11 +302,10 @@ internal object ToolPkgPromptHookBridge {
                         functionSource = hook.functionSource
                     )
                 }
-            }.sortedWith(
-                compareBy(
-                    ToolPkgPromptHookRegistration::containerPackageName,
-                    ToolPkgPromptHookRegistration::hookId
-                )
+            }.sortedByToolPkgLoadOrder(
+                activeContainers = activeContainers,
+                containerPackageName = ToolPkgPromptHookRegistration::containerPackageName,
+                registrationId = ToolPkgPromptHookRegistration::hookId
             )
 
         toolPromptComposeHooks =
@@ -296,11 +318,10 @@ internal object ToolPkgPromptHookBridge {
                         functionSource = hook.functionSource
                     )
                 }
-            }.sortedWith(
-                compareBy(
-                    ToolPkgPromptHookRegistration::containerPackageName,
-                    ToolPkgPromptHookRegistration::hookId
-                )
+            }.sortedByToolPkgLoadOrder(
+                activeContainers = activeContainers,
+                containerPackageName = ToolPkgPromptHookRegistration::containerPackageName,
+                registrationId = ToolPkgPromptHookRegistration::hookId
             )
 
         promptFinalizeHooks =
@@ -313,11 +334,10 @@ internal object ToolPkgPromptHookBridge {
                         functionSource = hook.functionSource
                     )
                 }
-            }.sortedWith(
-                compareBy(
-                    ToolPkgPromptHookRegistration::containerPackageName,
-                    ToolPkgPromptHookRegistration::hookId
-                )
+            }.sortedByToolPkgLoadOrder(
+                activeContainers = activeContainers,
+                containerPackageName = ToolPkgPromptHookRegistration::containerPackageName,
+                registrationId = ToolPkgPromptHookRegistration::hookId
             )
 
         promptEstimateFinalizeHooks =
@@ -330,11 +350,10 @@ internal object ToolPkgPromptHookBridge {
                         functionSource = hook.functionSource
                     )
                 }
-            }.sortedWith(
-                compareBy(
-                    ToolPkgPromptHookRegistration::containerPackageName,
-                    ToolPkgPromptHookRegistration::hookId
-                )
+            }.sortedByToolPkgLoadOrder(
+                activeContainers = activeContainers,
+                containerPackageName = ToolPkgPromptHookRegistration::containerPackageName,
+                registrationId = ToolPkgPromptHookRegistration::hookId
             )
     }
 

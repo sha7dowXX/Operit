@@ -1,4 +1,8 @@
 *.iml
+*.keystore
+*.jks
+*.p12
+*.lineage
 .gradle
 .gradle-local
 /local.properties
@@ -15,8 +19,6 @@
 .cxx
 local.properties
 node_modules
-package-lock.json
-pnpm-lock.yaml
 temp.json
 build
 /app/src/main/jniLibs
@@ -62,6 +64,10 @@ operit-pc-agent.zip
 # generated toolpkg bundles
 *.toolpkg
 .venv
+
+# Python bytecode caches
+__pycache__/
+*.py[cod]
 
 # generated React web-chat build outputs
 web-chat/dist/

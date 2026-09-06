@@ -1,10 +1,30 @@
 package com.ai.assistance.operit.ui.features.packages.market
 
+import com.ai.assistance.operit.BuildConfig
+import com.ai.assistance.operit.data.api.GitHubRelease
+import com.ai.assistance.operit.data.api.MarketV2Entry
+import com.ai.assistance.operit.data.api.MarketV2Version
 import java.io.File
 import kotlinx.serialization.Serializable
 
 const val OPERIT_MARKET_OWNER = "AAswordman"
 const val OPERIT_FORGE_REPO_NAME = "OperitForge"
+const val PUBLISH_LOGO_MAX_BYTES = 512 * 1024
+const val LEGACY_TOOLPKG_API_VERSION = "1.0.0"
+
+fun String?.effectiveToolPkgApiVersion(): String {
+    return this?.trim()?.takeIf { it.isNotBlank() } ?: LEGACY_TOOLPKG_API_VERSION
+}
+
+fun MarketV2Version.effectiveToolPkgApiVersion(): String {
+    return apiVersion.effectiveToolPkgApiVersion()
+}
+
+data class ToolPkgLogoAsset(
+    val fileName: String,
+    val contentType: String,
+    val bytes: ByteArray
+)
 
 private const val SCRIPT_MARKET_LABEL = "script-artifact"
 private const val PACKAGE_MARKET_LABEL = "package-artifact"
@@ -57,6 +77,17 @@ enum class PublishArtifactType(
     }
 }
 
+enum class MarketAppVersionCompatibilityKind {
+    BELOW_MINIMUM,
+    ABOVE_MAXIMUM
+}
+
+data class MarketAppVersionCompatibility(
+    val kind: MarketAppVersionCompatibilityKind,
+    val currentVersion: String,
+    val requiredVersion: String
+)
+
 fun PublishArtifactType.marketFormatVersion(): String {
     return when (this) {
         PublishArtifactType.SCRIPT -> "script_v2"
@@ -84,6 +115,7 @@ enum class PublishProgressStage {
     ENSURING_REPO,
     CREATING_RELEASE,
     UPLOADING_ASSET,
+    RESOLVING_RELEASE_ASSET,
     REGISTERING_MARKET,
     COMPLETED
 }
@@ -100,10 +132,35 @@ data class LocalPublishableArtifact(
     val packageName: String,
     val displayName: String,
     val description: String,
+    val author: List<String> = emptyList(),
     val sourceFile: File,
     val hasDeclaredAuthorField: Boolean = false,
     val declaredAuthorSlotCount: Int = 0,
-    val inferredVersion: String? = null
+    val inferredVersion: String? = null,
+    val apiVersion: String? = null
+)
+
+sealed interface PublishArtifactSource {
+    data class DirectUpload(
+        val minifyArtifact: Boolean
+    ) : PublishArtifactSource
+
+    data class GitHubReleaseAsset(
+        val owner: String,
+        val repository: String,
+        val releaseTag: String,
+        val assetName: String
+    ) : PublishArtifactSource
+}
+
+data class GitHubReleaseRepository(
+    val owner: String,
+    val repository: String
+)
+
+data class GitHubReleaseCatalog(
+    val repository: GitHubReleaseRepository,
+    val releases: List<GitHubRelease>
 )
 
 data class ArtifactPublishClusterContext(
@@ -113,7 +170,10 @@ data class ArtifactPublishClusterContext(
     val lockedDisplayName: String,
     val projectDisplayName: String,
     val projectDescription: String,
-    val categoryId: String = ""
+    val marketDescription: String,
+    val marketDetail: String,
+    val categoryId: String = "",
+    val canEditEntry: Boolean = false
 )
 
 data class PublishArtifactDescriptor(
@@ -124,14 +184,17 @@ data class PublishArtifactDescriptor(
     val runtimePackageId: String,
     val displayName: String,
     val description: String,
+    val detail: String,
     val categoryId: String,
     val version: String,
+    val apiVersion: String? = null,
     val allowPublicUpdates: Boolean = true,
     val sourceFile: File,
     val contentType: String,
     val assetName: String,
     val minSupportedAppVersion: String?,
-    val maxSupportedAppVersion: String?
+    val maxSupportedAppVersion: String?,
+    val protection: String? = null
 )
 
 data class PublishReleaseDescriptor(
@@ -148,19 +211,23 @@ data class MarketRegistrationPayload(
     val projectDescription: String,
     val runtimePackageId: String,
     val publisherLogin: String,
-    val forgeRepo: String,
+    val releaseOwner: String,
+    val releaseRepository: String,
     val releaseTag: String,
     val assetName: String,
     val downloadUrl: String,
     val sha256: String,
     val version: String,
+    val apiVersion: String? = null,
     val displayName: String,
     val description: String,
+    val detail: String,
     val categoryId: String,
     val allowPublicUpdates: Boolean = true,
     val sourceFileName: String,
     val minSupportedAppVersion: String?,
-    val maxSupportedAppVersion: String?
+    val maxSupportedAppVersion: String?,
+    val protection: String? = null
 )
 
 @Serializable
@@ -176,14 +243,17 @@ data class ArtifactMarketMetadata(
     val downloadUrl: String = "",
     val sha256: String = "",
     val version: String = "",
+    val apiVersion: String? = null,
     val displayName: String = "",
     val description: String = "",
     val categoryId: String = "",
     val sourceFileName: String = "",
     val minSupportedAppVersion: String? = null,
     val maxSupportedAppVersion: String? = null,
+    val protection: String? = null,
     val normalizedId: String = "",
-    val forgeRepo: String = ""
+    val releaseOwner: String = "",
+    val releaseRepository: String = ""
 )
 
 fun ArtifactMarketMetadata.effectiveProjectId(): String {
@@ -220,6 +290,8 @@ fun ArtifactMarketMetadata.toPublishClusterContext(entryId: String? = null): Art
         lockedDisplayName = displayName.trim().ifBlank { effectiveProjectDisplayName() },
         projectDisplayName = effectiveProjectDisplayName(),
         projectDescription = effectiveProjectDescription(),
+        marketDescription = description,
+        marketDetail = effectiveProjectDescription(),
         categoryId = categoryId
     )
 }
@@ -278,7 +350,8 @@ fun buildPublishArtifactDescriptor(
     allowPublicUpdates: Boolean = true,
     minSupportedAppVersion: String?,
     maxSupportedAppVersion: String?,
-    publishContext: ArtifactPublishClusterContext? = null
+    publishContext: ArtifactPublishClusterContext? = null,
+    protection: String? = null
 ): PublishArtifactDescriptor {
     val runtimePackageId = localArtifact.packageName.trim().ifBlank { localArtifact.packageName }
     if (publishContext == null) {
@@ -300,14 +373,17 @@ fun buildPublishArtifactDescriptor(
             .removePrefix("V")
             .ifBlank { "1.0.0" }
     val lockedDisplayName = publishContext?.lockedDisplayName?.trim().orEmpty()
+    val isContributorContinuation = publishContext?.canEditEntry == false
     if (publishContext != null) {
         require(lockedDisplayName.isNotBlank()) {
             "Continuation publish must keep source display name"
         }
     }
     val resolvedDisplayName =
-        lockedDisplayName.ifBlank {
-            displayName.trim().ifBlank { localArtifact.displayName }
+        if (isContributorContinuation) {
+            lockedDisplayName
+        } else {
+            displayName.trim().ifBlank { lockedDisplayName.ifBlank { localArtifact.displayName } }
         }
     val extension = localArtifact.sourceFile.extension.lowercase().ifBlank { "bin" }
     val projectId =
@@ -317,13 +393,20 @@ fun buildPublishArtifactDescriptor(
             ?.let(::normalizeMarketArtifactId)
             ?: normalizeMarketArtifactId(runtimePackageId)
     val projectDisplayName =
-        publishContext?.projectDisplayName
-            ?.trim()
-            ?.takeIf { it.isNotBlank() }
-            ?: displayName.trim().ifBlank { localArtifact.displayName }
+        if (isContributorContinuation) {
+            publishContext?.projectDisplayName?.trim().orEmpty().ifBlank { resolvedDisplayName }
+        } else {
+            resolvedDisplayName
+        }
     val projectDescription = detail.trim().ifBlank { description.trim().ifBlank { localArtifact.description } }
-    val resolvedCategoryId = publishContext?.categoryId?.trim().orEmpty().ifBlank { categoryId.trim() }
+    val resolvedCategoryId =
+        if (isContributorContinuation) {
+            publishContext?.categoryId?.trim().orEmpty()
+        } else {
+            categoryId.trim().ifBlank { publishContext?.categoryId?.trim().orEmpty() }
+        }
     val assetName = "$normalizedRuntimePackageId-v$cleanVersion.$extension"
+    val normalizedProtection = protection?.trim()?.takeIf { it.isNotBlank() }
 
     return PublishArtifactDescriptor(
         type = type,
@@ -333,14 +416,27 @@ fun buildPublishArtifactDescriptor(
         runtimePackageId = runtimePackageId,
         displayName = resolvedDisplayName,
         description = description.trim().ifBlank { localArtifact.description },
+        detail = detail.trim(),
         categoryId = resolvedCategoryId,
         version = cleanVersion,
+        apiVersion =
+            if (type == PublishArtifactType.PACKAGE) {
+                localArtifact.apiVersion.effectiveToolPkgApiVersion()
+            } else {
+                null
+            },
         allowPublicUpdates = allowPublicUpdates,
         sourceFile = localArtifact.sourceFile,
-        contentType = inferArtifactContentType(type, extension),
+        contentType =
+            if (normalizedProtection != null && type == PublishArtifactType.SCRIPT) {
+                "application/octet-stream"
+            } else {
+                inferArtifactContentType(type, extension)
+            },
         assetName = assetName,
         minSupportedAppVersion = normalizeAppVersionOrNull(minSupportedAppVersion),
-        maxSupportedAppVersion = normalizeAppVersionOrNull(maxSupportedAppVersion)
+        maxSupportedAppVersion = normalizeAppVersionOrNull(maxSupportedAppVersion),
+        protection = normalizedProtection
     )
 }
 
@@ -361,6 +457,18 @@ fun buildPublishReleaseDescriptor(
                 appendLine("Runtime package ID: ${descriptor.runtimePackageId}")
                 appendLine("Display name: ${descriptor.displayName}")
                 appendLine("Version: ${descriptor.version}")
+                if (descriptor.type == PublishArtifactType.PACKAGE) {
+                    appendLine(
+                        "ToolPkg API version: ${descriptor.apiVersion.effectiveToolPkgApiVersion()}"
+                    )
+                } else {
+                    descriptor.apiVersion?.let { apiVersion ->
+                        appendLine("ToolPkg API version: $apiVersion")
+                    }
+                }
+                descriptor.protection?.let { protection ->
+                    appendLine("Protection: $protection")
+                }
                 appendLine(
                     "Supported app versions: ${formatSupportedAppVersions(descriptor.minSupportedAppVersion, descriptor.maxSupportedAppVersion)}"
                 )
@@ -378,17 +486,26 @@ fun buildArtifactMarketMetadata(
         projectDescription = payload.projectDescription,
         runtimePackageId = payload.runtimePackageId,
         publisherLogin = payload.publisherLogin,
+        releaseOwner = payload.releaseOwner,
+        releaseRepository = payload.releaseRepository,
         releaseTag = payload.releaseTag,
         assetName = payload.assetName,
         downloadUrl = payload.downloadUrl,
         sha256 = payload.sha256,
         version = payload.version,
+        apiVersion =
+            if (payload.type == PublishArtifactType.PACKAGE) {
+                payload.apiVersion.effectiveToolPkgApiVersion()
+            } else {
+                null
+            },
         displayName = payload.displayName,
         description = payload.description,
         categoryId = payload.categoryId,
         sourceFileName = payload.sourceFileName,
         minSupportedAppVersion = payload.minSupportedAppVersion,
-        maxSupportedAppVersion = payload.maxSupportedAppVersion
+        maxSupportedAppVersion = payload.maxSupportedAppVersion,
+        protection = payload.protection
     )
 }
 
@@ -437,16 +554,51 @@ fun isAppVersionSupported(
     minSupportedAppVersion: String?,
     maxSupportedAppVersion: String?
 ): Boolean {
-    val normalizedCurrent = normalizeAppVersionOrNull(appVersion) ?: return true
-    val normalizedMin = normalizeAppVersionOrNull(minSupportedAppVersion)
-    val normalizedMax = normalizeAppVersionOrNull(maxSupportedAppVersion)
-    if (normalizedMin != null && compareAppVersions(normalizedCurrent, normalizedMin) < 0) {
-        return false
+    return resolveAppVersionCompatibility(
+        appVersion = appVersion,
+        minSupportedAppVersion = minSupportedAppVersion,
+        maxSupportedAppVersion = maxSupportedAppVersion
+    ) == null
+}
+
+fun resolveAppVersionCompatibility(
+    appVersion: String,
+    minSupportedAppVersion: String?,
+    maxSupportedAppVersion: String?
+): MarketAppVersionCompatibility? {
+    val current = requireNotNull(parseAppVersionOrNull(appVersion)) {
+        "Current app version must use x.y.z or x.y.z+n format"
     }
-    if (normalizedMax != null && compareAppVersions(normalizedCurrent, normalizedMax) > 0) {
-        return false
+    val minimum = parseAppVersionOrNull(minSupportedAppVersion)
+    if (minimum != null && compareAppVersions(current.toString(), minimum.toString()) < 0) {
+        return MarketAppVersionCompatibility(
+            kind = MarketAppVersionCompatibilityKind.BELOW_MINIMUM,
+            currentVersion = current.toString(),
+            requiredVersion = minimum.toString()
+        )
     }
-    return true
+    val maximum = parseAppVersionOrNull(maxSupportedAppVersion)
+    if (maximum != null && compareAppVersions(current.toString(), maximum.toString()) > 0) {
+        return MarketAppVersionCompatibility(
+            kind = MarketAppVersionCompatibilityKind.ABOVE_MAXIMUM,
+            currentVersion = current.toString(),
+            requiredVersion = maximum.toString()
+        )
+    }
+    return null
+}
+
+fun MarketV2Entry.resolveCurrentAppVersionCompatibility(): MarketAppVersionCompatibility? {
+    val version = latestVersion ?: return null
+    return resolveAppVersionCompatibility(
+        appVersion = BuildConfig.VERSION_NAME,
+        minSupportedAppVersion = version.minAppVer,
+        maxSupportedAppVersion = version.maxAppVer
+    )
+}
+
+fun MarketV2Entry.isUnsupportedByCurrentAppVersion(): Boolean {
+    return resolveCurrentAppVersionCompatibility() != null
 }
 
 fun isOperit2VersionAllowed(maxSupportedAppVersion: String?): Boolean {

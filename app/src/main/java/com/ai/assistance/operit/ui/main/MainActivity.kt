@@ -62,8 +62,6 @@ import com.ai.assistance.operit.data.mcp.MCPRepository
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.ui.res.stringResource
-import com.ai.assistance.operit.data.preferences.GitHubAuthPreferences
-import com.ai.assistance.operit.ui.features.github.GitHubOAuthCoordinator
 import com.ai.assistance.operit.widget.ToolPkgDesktopWidgetHost
 import org.json.JSONObject
 
@@ -103,13 +101,12 @@ class MainActivity : ComponentActivity() {
     private var pendingSharedFileUris: List<Uri>? = null
 
     private var pendingSharedText: String? = null
-    private var pendingGitHubAuthUri: Uri? = null
-    private var pendingShortcutNavItem: NavItem? = null
-    private var pendingShortcutRequestId: Long = 0L
-    private var currentMainNavItem: NavItem = NavItem.AiChat
-    private var pendingRouteId: String? = null
-    private var pendingRouteArgs: Map<String, Any?> = emptyMap()
-    private var pendingRouteRequestId: Long = 0L
+    private var pendingShortcutNavItem by mutableStateOf<NavItem?>(null)
+    private var pendingShortcutRequestId by mutableStateOf(0L)
+    private var currentMainNavItem by mutableStateOf<NavItem>(NavItem.AiChat)
+    private var pendingRouteId by mutableStateOf<String?>(null)
+    private var pendingRouteArgs by mutableStateOf<Map<String, Any?>>(emptyMap())
+    private var pendingRouteRequestId by mutableStateOf(0L)
 
     // 通知权限请求启动器
     private val notificationPermissionLauncher = registerForActivityResult(
@@ -162,16 +159,14 @@ class MainActivity : ComponentActivity() {
         // 获取当前设置的语言
         val code = LocaleUtils.getCurrentLanguage(newBase)
         val locale = LocaleUtils.getLocaleForLanguageCode(code, newBase)
-        val config = Configuration(newBase.resources.configuration)
+        val config = LocaleUtils.createLocaleOverrideConfiguration(locale)
 
         // 设置语言配置
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
             val localeList = LocaleList(locale)
             LocaleList.setDefault(localeList)
-            config.setLocales(localeList)
         } else {
             @Suppress("DEPRECATION")
-            config.locale = locale
             Locale.setDefault(locale)
         }
 
@@ -213,7 +208,6 @@ class MainActivity : ComponentActivity() {
 
         // 设置初始界面
         setAppContent()
-        processPendingGitHubAuth()
 
         // 初始化并设置更新管理器
         setupUpdateManager()
@@ -236,8 +230,6 @@ class MainActivity : ComponentActivity() {
         val handledShortcutIntent = handleIntent(intent)
 
         if (handledShortcutIntent) {
-            processPendingGitHubAuth()
-            setAppContent()
             return
         }
         
@@ -273,13 +265,6 @@ class MainActivity : ComponentActivity() {
             return true
         }
 
-        val intentUri = intent?.data
-        if (GitHubAuthPreferences.isOAuthRedirectUri(intentUri)) {
-            pendingGitHubAuthUri = intentUri
-            AppLogger.d(TAG, "Received GitHub OAuth redirect: $intentUri")
-            return true
-        }
-        
         // Handle opened and shared files
         when (intent?.action) {
             Intent.ACTION_VIEW -> {
@@ -333,42 +318,6 @@ class MainActivity : ComponentActivity() {
             }
         }
         return false
-    }
-
-    private fun processPendingGitHubAuth() {
-        val authUri = pendingGitHubAuthUri ?: return
-        pendingGitHubAuthUri = null
-
-        lifecycleScope.launch {
-            val coordinator = GitHubOAuthCoordinator(this@MainActivity)
-            val result = coordinator.completeExternalLogin(authUri)
-            result.fold(
-                onSuccess = { user ->
-                    Toast.makeText(
-                        this@MainActivity,
-                        getString(R.string.main_github_login_success, user.login),
-                        Toast.LENGTH_LONG
-                    ).show()
-                },
-                onFailure = { error ->
-                    val message = error.message.orEmpty()
-                    if (authUri.getQueryParameter("error") == "access_denied") {
-                        Toast.makeText(
-                            this@MainActivity,
-                            getString(R.string.github_login_external_cancelled),
-                            Toast.LENGTH_SHORT
-                        ).show()
-                    } else {
-                        Toast.makeText(
-                            this@MainActivity,
-                            getString(R.string.main_github_login_failed, message),
-                            Toast.LENGTH_LONG
-                        ).show()
-                    }
-                    AppLogger.e(TAG, "Failed to complete external GitHub login", error)
-                }
-            )
-        }
     }
 
     private suspend fun prepareStartupChatIfNeeded() {
@@ -653,7 +602,7 @@ class MainActivity : ComponentActivity() {
                         if (!agreementPreferences.isAgreementAccepted()) {
                             AgreementScreen(
                                     onAgreementAccepted = {
-                                        agreementPreferences.setAgreementAccepted(true)
+                                        agreementPreferences.acceptCurrentAgreement()
                                         // 协议接受后，检查权限级别设置
                                         lifecycleScope.launch {
                                             // 确保使用非阻塞方式更新UI

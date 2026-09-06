@@ -6,7 +6,9 @@ import kotlinx.serialization.Serializable
 @Serializable
 enum class ApiProviderType {
         OPENAI, // OpenAI (GPT系列)
+        XAI, // xAI (Grok)
         OPENAI_RESPONSES, // OpenAI Responses API
+        OPENAI_CODEX, // OpenAI Codex（ChatGPT OAuth）
         OPENAI_RESPONSES_GENERIC, // OpenAI Responses通用（自定义端点）
         OPENAI_GENERIC, // OpenAI通用（自定义端点）
         ANTHROPIC, // Anthropic (Claude系列)
@@ -25,6 +27,7 @@ enum class ApiProviderType {
         SILICONFLOW, // 硅基流动
         IFLOW, // iFlow
         OPENROUTER, // OpenRouter (多模型聚合)
+        OPENCODE, // OpenCode Zen/Go (按基础路径选择服务，按模型ID选择协议)
         FOUR_ROUTER, // 4Router
         NOUS_PORTAL, // Nous Portal / Inference API
         INFINIAI, // 无问芯穹
@@ -38,6 +41,7 @@ enum class ApiProviderType {
         LLAMA_CPP, // llama.cpp 本地推理引擎
         PPINFRA, // 派欧云
         NOVITA, // Novita AI
+        MINIMAX, // MiniMax
         OTHER; // 其他提供商（自定义端点）
 
         companion object {
@@ -57,6 +61,7 @@ object ModelConfigDefaults {
         const val DEFAULT_CONTEXT_LENGTH = 64.0f
         const val DEFAULT_MAX_CONTEXT_LENGTH = 200.0f
         const val DEFAULT_ENABLE_MAX_CONTEXT_MODE = false
+        const val DEFAULT_ENABLE_TOOL_CALL = true
         const val DEFAULT_SUMMARY_TOKEN_THRESHOLD = 0.70f
         const val DEFAULT_ENABLE_SUMMARY = true
         const val DEFAULT_ENABLE_SUMMARY_BY_MESSAGE_COUNT = true
@@ -106,6 +111,12 @@ data class ModelConfigData(
         // 自定义参数JSON字符串
         val customParameters: String = "[]",
 
+        // 当前模型配置的思考规则；内置适配规则由data.collects集中维护并在配置创建或供应商切换时写入
+        val thinkingConfigurations: String = "[]",
+
+        // 当前模型配置选中的思考档位
+        val thinkingOptionId: String = "",
+
         // 自定义请求头JSON字符串
         val customHeaders: String = "{}",
 
@@ -148,11 +159,17 @@ data class ModelConfigData(
         // Gemini特定配置
         val enableGoogleSearch: Boolean = false, // 是否启用Google Search Grounding (仅Gemini支持)
 
+        // DeepSeek特定配置
+        val enableDeepSeekWebSearch: Boolean = false, // 是否启用DeepSeek Responses服务端搜索
+
+        // Codex特定配置
+        val enableCodexWebSearch: Boolean = false, // 是否启用Codex认证登录下的服务端网络搜索
+
         // Claude特定配置
         val enableClaude1hPromptCache: Boolean = false, // 是否启用1小时提示缓存TTL (仅Claude支持)
 
         // Tool Call配置
-        val enableToolCall: Boolean = false, // 是否启用Tool Call接口调用工具（使用模型原生工具调用而非XML格式）
+        val enableToolCall: Boolean = ModelConfigDefaults.DEFAULT_ENABLE_TOOL_CALL, // 是否启用Tool Call接口调用工具（使用模型原生工具调用而非XML格式）
 
         // 请求频率限制配置
         val requestLimitPerMinute: Int = 0, // 每分钟最大请求次数，0表示不限流
@@ -167,6 +184,9 @@ data class ModelConfigSummary(
         val modelName: String = "",
         val apiEndpoint: String = "",
         val apiProviderType: ApiProviderType = ApiProviderType.DEEPSEEK,
+        val apiProviderTypeId: String = apiProviderType.name,
+        val thinkingConfigurations: String = "[]",
+        val thinkingOptionId: String = "",
         val modelIndex: Int = 0 // 当modelName包含多个模型（逗号分隔）时，选择第几个模型（从0开始）
 )
 

@@ -26,6 +26,7 @@ import com.ai.assistance.operit.core.tools.packTool.PackageManager
 import com.ai.assistance.operit.data.announcement.RemoteAnnouncementDisplay
 import com.ai.assistance.operit.data.announcement.RemoteAnnouncementRepository
 import com.ai.assistance.operit.data.mcp.MCPRepository
+import com.ai.assistance.operit.data.security.PluginDenylistRepository
 import com.ai.assistance.operit.data.preferences.ApiPreferences
 import com.ai.assistance.operit.data.preferences.DisplayPreferencesManager
 import com.ai.assistance.operit.data.preferences.RemoteAnnouncementPreferences
@@ -40,6 +41,7 @@ import com.ai.assistance.operit.ui.main.screens.Screen
 import com.ai.assistance.operit.ui.main.navigation.AppRouterGateway
 import com.ai.assistance.operit.ui.main.navigation.AppRouterState
 import com.ai.assistance.operit.ui.main.navigation.AppRouteDiscoveryGateway
+import com.ai.assistance.operit.ui.main.navigation.screenKeysAliveOnStack
 import com.ai.assistance.operit.ui.main.navigation.NavigationEntrySpec
 import com.ai.assistance.operit.ui.main.navigation.NavigationSurface
 import com.ai.assistance.operit.ui.main.navigation.RouteEntrySource
@@ -103,6 +105,7 @@ fun OperitApp(
     }
     val remoteAnnouncementRepository = remember { RemoteAnnouncementRepository() }
     val remoteAnnouncementPreferences = remember { RemoteAnnouncementPreferences(context) }
+    val pluginDenylistRepository = remember { PluginDenylistRepository(appContext) }
     var navigationRevision by remember { mutableStateOf(0) }
     val configuration = LocalConfiguration.current
     val navigationModel = remember(context, configuration, navigationRevision) { AppRouteCatalog.build(context) }
@@ -114,6 +117,12 @@ fun OperitApp(
     val currentRouteEntry = routerState.currentEntry
     val currentScreen = AppRouteCatalog.resolveScreen(navigationModel, currentRouteEntry) ?: Screen.AiChat
     val selectedItem = currentScreen.navItem
+    // 当前导航栈中仍存活的路由 screenKey（路由级 ViewModelStore 清理依据：
+    // AppContent 在转场完成时只保留这些键的 owner）
+    val aliveScreenKeys: Set<String> =
+        screenKeysAliveOnStack(routerState.backStack) { entry ->
+            AppRouteCatalog.resolveScreen(navigationModel, entry)
+        }
     val pluginSidebarEntries =
         remember(navigationModel) {
             navigationModel.navigationEntries.filter {
@@ -132,6 +141,41 @@ fun OperitApp(
     var topBarTitleContent by remember { mutableStateOf<TopBarTitleContent?>(null) }
     var lastHandledShortcutRequestId by remember { mutableStateOf(0L) }
     var lastHandledRouteRequestId by remember { mutableStateOf(0L) }
+    var isRouteTransitionInProgress by remember { mutableStateOf(false) }
+    var queuedRouteTransition by remember { mutableStateOf<(() -> Unit)?>(null) }
+
+    fun requestRouteTransition(
+        queueIfBusy: Boolean = true,
+        onAllowed: () -> Unit,
+    ) {
+        scope.launch {
+            if (isRouteTransitionInProgress) {
+                if (queueIfBusy) {
+                    queuedRouteTransition = onAllowed
+                }
+                return@launch
+            }
+            isRouteTransitionInProgress = true
+            val routeInstanceId = routerState.currentEntry.instanceId
+            try {
+                val canLeave = routeBackGuardRegistry.canLeaveRoute(routeInstanceId)
+                if (canLeave && routerState.currentEntry.instanceId == routeInstanceId) {
+                    onAllowed()
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                AppLogger.e(TAG, "Navigation handling failed", e)
+            } finally {
+                isRouteTransitionInProgress = false
+                val queuedTransition = queuedRouteTransition
+                queuedRouteTransition = null
+                if (queuedTransition != null) {
+                    requestRouteTransition(onAllowed = queuedTransition)
+                }
+            }
+        }
+    }
 
     LaunchedEffect(selectedItem) {
         selectedItem?.let { navItem ->
@@ -149,11 +193,13 @@ fun OperitApp(
         }
 
         val targetEntry = AppRouteCatalog.initialEntry(requestNavItem)
-        isNavigatingBack = false
-        navigationTransitionSource = NavigationTransitionSource.DEFAULT
-        routerState.resetTo(targetEntry)
         lastHandledShortcutRequestId = shortcutNavRequestId
         onShortcutNavHandled(shortcutNavRequestId)
+        requestRouteTransition {
+            isNavigatingBack = false
+            navigationTransitionSource = NavigationTransitionSource.DEFAULT
+            routerState.resetTo(targetEntry)
+        }
     }
 
     LaunchedEffect(routeNavRequestId, routeNavRequest, routeNavArgs, navigationModel) {
@@ -170,17 +216,19 @@ fun OperitApp(
             onRouteNavHandled(routeNavRequestId)
             return@LaunchedEffect
         }
-        isNavigatingBack = false
-        navigationTransitionSource = NavigationTransitionSource.DEFAULT
-        routerState.resetTo(
-            com.ai.assistance.operit.ui.main.navigation.RouteEntry(
-                routeId = requestRouteId,
-                args = routeNavArgs,
-                source = RouteEntrySource.DEFAULT
-            )
-        )
         lastHandledRouteRequestId = routeNavRequestId
         onRouteNavHandled(routeNavRequestId)
+        requestRouteTransition {
+            isNavigatingBack = false
+            navigationTransitionSource = NavigationTransitionSource.DEFAULT
+            routerState.resetTo(
+                com.ai.assistance.operit.ui.main.navigation.RouteEntry(
+                    routeId = requestRouteId,
+                    args = routeNavArgs,
+                    source = RouteEntrySource.DEFAULT
+                )
+            )
+        }
     }
 
     // 当currentScreen改变时，检查是否需要清空TopBarActions
@@ -194,10 +242,6 @@ fun OperitApp(
 
     // Navigation functions
     fun navigateTo(newScreen: Screen, fromDrawer: Boolean = false) {
-        isNavigatingBack = false
-        navigationTransitionSource =
-            if (fromDrawer) NavigationTransitionSource.DRAWER
-            else NavigationTransitionSource.DEFAULT
         val nextEntry =
             AppRouteCatalog.toEntry(
                 screen = newScreen,
@@ -208,15 +252,21 @@ fun OperitApp(
         if (currentRouteEntry.routeId == nextEntry.routeId && currentRouteEntry.args == nextEntry.args) {
             return
         }
-        if (fromDrawer) {
-            routerState.resetTo(nextEntry)
-        } else {
-            routerState.navigate(
-                routeId = nextEntry.routeId,
-                args = nextEntry.args,
-                source = nextEntry.source,
-                routeSpec = navigationModel.routesById[nextEntry.routeId]
-            )
+        requestRouteTransition {
+            isNavigatingBack = false
+            navigationTransitionSource =
+                if (fromDrawer) NavigationTransitionSource.DRAWER
+                else NavigationTransitionSource.DEFAULT
+            if (fromDrawer) {
+                routerState.resetTo(nextEntry)
+            } else {
+                routerState.navigate(
+                    routeId = nextEntry.routeId,
+                    args = nextEntry.args,
+                    source = nextEntry.source,
+                    routeSpec = navigationModel.routesById[nextEntry.routeId]
+                )
+            }
         }
     }
 
@@ -225,44 +275,15 @@ fun OperitApp(
             isNavigatingBack = true
             navigationTransitionSource = NavigationTransitionSource.DEFAULT
             routerState.pop()
-        } else if (currentScreen !is Screen.AiChat) {
+        } else if (routerState.currentEntry.routeId != AppRouteCatalog.toEntry(Screen.AiChat).routeId) {
             isNavigatingBack = true
             navigationTransitionSource = NavigationTransitionSource.DEFAULT
             routerState.resetTo(AppRouteCatalog.toEntry(Screen.AiChat))
         }
     }
 
-    var isBackRequestInProgress by remember { mutableStateOf(false) }
-
     fun requestGoBack() {
-        val requestedRouteInstanceId = routerState.currentEntry.instanceId
-        if (!routeBackGuardRegistry.hasGuard(requestedRouteInstanceId)) {
-            performGoBack()
-            return
-        }
-        if (isBackRequestInProgress) {
-            return
-        }
-
-        isBackRequestInProgress = true
-        scope.launch {
-            try {
-                val canNavigateBack =
-                    routeBackGuardRegistry.canNavigateBack(requestedRouteInstanceId)
-                if (
-                    canNavigateBack &&
-                        routerState.currentEntry.instanceId == requestedRouteInstanceId
-                ) {
-                    performGoBack()
-                }
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                AppLogger.e(TAG, "返回处理失败", e)
-            } finally {
-                isBackRequestInProgress = false
-            }
-        }
+        requestRouteTransition(queueIfBusy = false, onAllowed = ::performGoBack)
     }
 
     fun navigateToNavigationEntry(entry: NavigationEntrySpec) {
@@ -296,15 +317,17 @@ fun OperitApp(
         if (currentRouteEntry.routeId == entry.routeId && currentRouteEntry.args == entry.routeArgs) {
             return
         }
-        isNavigatingBack = false
-        navigationTransitionSource = NavigationTransitionSource.DRAWER
-        routerState.resetTo(
-            com.ai.assistance.operit.ui.main.navigation.RouteEntry(
-                routeId = entry.routeId,
-                args = entry.routeArgs,
-                source = RouteEntrySource.DRAWER
+        requestRouteTransition {
+            isNavigatingBack = false
+            navigationTransitionSource = NavigationTransitionSource.DRAWER
+            routerState.resetTo(
+                com.ai.assistance.operit.ui.main.navigation.RouteEntry(
+                    routeId = entry.routeId,
+                    args = entry.routeArgs,
+                    source = RouteEntrySource.DRAWER
+                )
             )
-        )
+        }
     }
 
     // Function to navigate to TokenConfig, treated as sub-navigation.
@@ -374,9 +397,14 @@ fun OperitApp(
         }
     }
 
-    // Fetch remote announcement when network becomes available.
     LaunchedEffect(isNetworkAvailable) {
-        if (!isNetworkAvailable || remoteAnnouncement != null) return@LaunchedEffect
+        if (!isNetworkAvailable) return@LaunchedEffect
+
+        launch {
+            pluginDenylistRepository.refreshFromRemote()
+        }
+
+        if (remoteAnnouncement != null) return@LaunchedEffect
 
         val announcement = remoteAnnouncementRepository.fetchDisplayableAnnouncement()
         if (announcement != null && remoteAnnouncementPreferences.shouldShow(announcement.version)) {
@@ -421,25 +449,42 @@ fun OperitApp(
             AppRouterGateway.install(
                 handler = { routeId, args, source ->
                     val routeSpec = navigationModel.routesById[routeId] ?: return@install
-                    isNavigatingBack = false
-                    navigationTransitionSource =
-                        if (source == RouteEntrySource.DRAWER) NavigationTransitionSource.DRAWER
-                        else NavigationTransitionSource.DEFAULT
-                    routerState.navigate(routeId = routeId, args = args, source = source, routeSpec = routeSpec)
+                    val currentEntry = routerState.currentEntry
+                    if (
+                        routeSpec.reuseOnTop &&
+                            currentEntry.routeId == routeId &&
+                            currentEntry.args == args
+                    ) {
+                        return@install
+                    }
+                    requestRouteTransition {
+                        isNavigatingBack = false
+                        navigationTransitionSource =
+                            if (source == RouteEntrySource.DRAWER) NavigationTransitionSource.DRAWER
+                            else NavigationTransitionSource.DEFAULT
+                        routerState.navigate(
+                            routeId = routeId,
+                            args = args,
+                            source = source,
+                            routeSpec = routeSpec,
+                        )
+                    }
                 },
                 reset = { routeId, args, source ->
                     navigationModel.routesById[routeId] ?: return@install
-                    isNavigatingBack = false
-                    navigationTransitionSource =
-                        if (source == RouteEntrySource.DRAWER) NavigationTransitionSource.DRAWER
-                        else NavigationTransitionSource.DEFAULT
-                    routerState.resetTo(
-                        com.ai.assistance.operit.ui.main.navigation.RouteEntry(
-                            routeId = routeId,
-                            args = args,
-                            source = source
+                    requestRouteTransition {
+                        isNavigatingBack = false
+                        navigationTransitionSource =
+                            if (source == RouteEntrySource.DRAWER) NavigationTransitionSource.DRAWER
+                            else NavigationTransitionSource.DEFAULT
+                        routerState.resetTo(
+                            com.ai.assistance.operit.ui.main.navigation.RouteEntry(
+                                routeId = routeId,
+                                args = args,
+                                source = source,
+                            )
                         )
-                    )
+                    }
                 }
             )
             AppRouteDiscoveryGateway.install {
@@ -494,7 +539,8 @@ fun OperitApp(
                     onGoBack = ::requestGoBack,
                     isNavigatingBack = isNavigatingBack,
                     topBarActions = { topBarActions() },
-                    topBarTitleContent = topBarTitleContent
+                    topBarTitleContent = topBarTitleContent,
+                    aliveScreenKeys = aliveScreenKeys
                 )
             } else {
                 // Phone layout
@@ -525,7 +571,8 @@ fun OperitApp(
                     onGoBack = ::requestGoBack,
                     isNavigatingBack = isNavigatingBack,
                     topBarActions = { topBarActions() },
-                    topBarTitleContent = topBarTitleContent
+                    topBarTitleContent = topBarTitleContent,
+                    aliveScreenKeys = aliveScreenKeys
                 )
             }
         }

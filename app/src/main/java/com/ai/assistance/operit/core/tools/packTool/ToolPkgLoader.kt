@@ -33,13 +33,8 @@ internal object ToolPkgLoader {
                     sourcePath = file.absolutePath,
                     isBuiltIn = false,
                     parseJsPackage = parseJsPackage,
-                    parseMainRegistration = { mainScriptText, toolPkgId, mainScriptPath ->
-                        parseMainRegistration(
-                            mainScriptText = mainScriptText,
-                            toolPkgId = toolPkgId,
-                            mainScriptPath = mainScriptPath,
-                            jsEngine = jsEngine
-                        )
+                    parseMainRegistration = { mainScriptText, toolPkgId, mainScriptPath, apiVersion ->
+                        parseMainRegistration(mainScriptText, toolPkgId, mainScriptPath, apiVersion, jsEngine)
                     },
                     reportPackageLoadError = reportPackageLoadError
                 )
@@ -58,8 +53,7 @@ internal object ToolPkgLoader {
         val manifestPreview =
             ToolPkgArchiveParser.readToolPkgManifestPreview(
                 inputStreamFactory = { context.assets.open(assetPath) }
-            )
-                ?: throw IllegalArgumentException("manifest.hjson or manifest.json not found")
+            ) ?: throw IllegalArgumentException("manifest.hjson or manifest.json not found")
         val extractedDir = prepareAssetCache(manifestPreview)
         val entryIndex = ToolPkgArchiveParser.buildDirectoryEntryIndex(extractedDir)
         val readEntryText =
@@ -80,13 +74,8 @@ internal object ToolPkgLoader {
                 sourcePath = assetPath,
                 isBuiltIn = true,
                 parseJsPackage = parseJsPackage,
-                parseMainRegistration = { mainScriptText, toolPkgId, mainScriptPath ->
-                    parseMainRegistration(
-                        mainScriptText = mainScriptText,
-                        toolPkgId = toolPkgId,
-                        mainScriptPath = mainScriptPath,
-                        jsEngine = jsEngine
-                    )
+                parseMainRegistration = { mainScriptText, toolPkgId, mainScriptPath, apiVersion ->
+                    parseMainRegistration(mainScriptText, toolPkgId, mainScriptPath, apiVersion, jsEngine)
                 },
                 reportPackageLoadError = reportPackageLoadError
             )
@@ -97,12 +86,14 @@ internal object ToolPkgLoader {
         mainScriptText: String,
         toolPkgId: String,
         mainScriptPath: String,
+        apiVersion: String,
         jsEngine: JsEngine
     ): ToolPkgMainRegistrationParseResult {
         return ToolPkgMainRegistrationScriptParser.parse(
             script = mainScriptText,
             toolPkgId = toolPkgId,
             mainScriptPath = mainScriptPath,
+            apiVersion = apiVersion,
             jsEngine = jsEngine
         )
     }

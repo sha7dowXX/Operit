@@ -18,12 +18,14 @@ import com.ai.assistance.operit.data.model.ToolParameter
 import com.ai.assistance.operit.data.model.ToolParameterSchema
 import com.ai.assistance.operit.data.model.TriggerNode
 import com.ai.assistance.operit.data.model.Workflow
+import com.ai.assistance.operit.data.model.WorkflowExecutionFailureStage
 import com.ai.assistance.operit.data.model.WorkflowExecutionLogEntry
 import com.ai.assistance.operit.data.model.WorkflowExecutionRecord
 import com.ai.assistance.operit.data.model.WorkflowLogLevel
 import com.ai.assistance.operit.data.model.WorkflowNode
 import com.ai.assistance.operit.data.model.WorkflowNodeConnection
 import com.ai.assistance.operit.core.tools.MessageSendResultData
+import com.ai.assistance.operit.data.preferences.initAndroidPermissionPreferences
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
@@ -64,8 +66,11 @@ data class WorkflowExecutionResult(
     val nodeResults: Map<String, NodeExecutionState>,
     val message: String,
     val executionTime: Long = System.currentTimeMillis(),
-    val executionRecord: WorkflowExecutionRecord? = null
+    val executionRecord: WorkflowExecutionRecord,
+    val shouldRetry: Boolean = false
 )
+
+class WorkflowExecutionRetryableException(message: String) : Exception(message)
 
 /**
  * 工作流执行器
@@ -73,7 +78,7 @@ data class WorkflowExecutionResult(
  */
 class WorkflowExecutor(private val context: Context) {
     
-    private val toolHandler = AIToolHandler.getInstance(context)
+    private val toolHandler by lazy { AIToolHandler.getInstance(context) }
     
     companion object {
         private const val TAG = "WorkflowExecutor"
@@ -143,6 +148,24 @@ class WorkflowExecutor(private val context: Context) {
 
     private fun isSkippedState(state: NodeExecutionState?): Boolean {
         return state is NodeExecutionState.Skipped || (state is NodeExecutionState.Success && state.result == context.getString(R.string.workflow_skip))
+    }
+
+    private fun prepareRuntime(workflow: Workflow) {
+        // Scheduled workers and broadcast receivers may enter here before the main Activity
+        // initialization path. Establish the preference dependency before registering tools.
+        initAndroidPermissionPreferences(context.applicationContext)
+
+        val actionNodes = workflow.nodes
+            .filterIsInstance<ExecuteNode>()
+            .filter { it.actionType.isNotBlank() }
+        if (actionNodes.isEmpty()) return
+
+        // Prepare package-backed tools before node execution so initialization errors retain a run record
+        // and can be retried by the scheduled worker instead of being reported as a missing tool.
+        toolHandler.registerDefaultTools()
+        if (actionNodes.any { it.actionType.contains(':') }) {
+            toolHandler.getOrCreatePackageManager().getAvailablePackages()
+        }
     }
 
     private fun parseBooleanLike(value: String): Boolean? {
@@ -512,7 +535,14 @@ class WorkflowExecutor(private val context: Context) {
         val runLogger = WorkflowRunLogger(TAG)
         val nodeResults = mutableMapOf<String, NodeExecutionState>()
 
-        fun buildResult(success: Boolean, message: String): WorkflowExecutionResult {
+        fun buildResult(
+            success: Boolean,
+            message: String,
+            failureStage: WorkflowExecutionFailureStage? =
+                if (success) null else WorkflowExecutionFailureStage.WORKFLOW_EXECUTION,
+            failureReason: String? = if (success) null else message,
+            shouldRetry: Boolean = false
+        ): WorkflowExecutionResult {
             val finishedAt = System.currentTimeMillis()
             val executionRecord =
                 WorkflowExecutionRecord(
@@ -524,7 +554,9 @@ class WorkflowExecutor(private val context: Context) {
                     finishedAt = finishedAt,
                     success = success,
                     message = message,
-                    logs = runLogger.entries
+                    logs = runLogger.entries,
+                    failureStage = failureStage,
+                    failureReason = failureReason
                 )
             return WorkflowExecutionResult(
                 workflowId = workflow.id,
@@ -532,7 +564,8 @@ class WorkflowExecutor(private val context: Context) {
                 nodeResults = nodeResults,
                 message = message,
                 executionTime = finishedAt,
-                executionRecord = executionRecord
+                executionRecord = executionRecord,
+                shouldRetry = shouldRetry
             )
         }
 
@@ -540,6 +573,23 @@ class WorkflowExecutor(private val context: Context) {
             context.getString(R.string.workflow_log_start_execution, workflow.name, workflow.id) +
                 " [runId=$runId]"
         )
+
+        try {
+            prepareRuntime(workflow)
+        } catch (e: Exception) {
+            val reason = e.toString()
+            runLogger.e(
+                context.getString(R.string.workflow_log_runtime_initialization_failed, reason),
+                throwable = e
+            )
+            return@withContext buildResult(
+                success = false,
+                message = context.getString(R.string.workflow_log_runtime_initialization_failed, reason),
+                failureStage = WorkflowExecutionFailureStage.RUNTIME_INITIALIZATION,
+                failureReason = reason,
+                shouldRetry = true
+            )
+        }
 
         try {
             // 1. 找到所有触发节点作为入口

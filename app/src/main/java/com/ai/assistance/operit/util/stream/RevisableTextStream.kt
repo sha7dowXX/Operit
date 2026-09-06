@@ -16,6 +16,11 @@ interface TextStreamEventCarrier {
     val eventChannel: SharedStream<TextStreamEvent>
 }
 
+/** Marks a replacement stream with content already rendered before a rollback. */
+internal interface StreamRollbackPrefix {
+    val rollbackPrefix: String
+}
+
 interface RevisableTextStream : Stream<String>, TextStreamEventCarrier
 
 interface RevisableSharedTextStream : SharedStream<String>, RevisableTextStream
@@ -65,6 +70,9 @@ private class DelegatingRevisableSharedTextStream(
     override val replayCache: List<String>
         get() = upstream.replayCache
 
+    override val completionCause: Throwable?
+        get() = upstream.completionCause
+
     override suspend fun lock() {
         upstream.lock()
     }
@@ -109,6 +117,11 @@ private class DelegatingRevisableCharStream(
     }
 }
 
+private class DelegatingRollbackPrefixCharStream(
+    private val upstream: Stream<Char>,
+    override val rollbackPrefix: String,
+) : Stream<Char> by upstream, StreamRollbackPrefix
+
 fun Stream<String>.withEventChannel(eventChannel: SharedStream<TextStreamEvent>): Stream<String> {
     if (this is RevisableTextStream && this.eventChannel === eventChannel) {
         return this
@@ -132,15 +145,33 @@ fun Stream<Char>.withTextEventChannel(eventChannel: SharedStream<TextStreamEvent
     return DelegatingRevisableCharStream(this, eventChannel)
 }
 
+internal fun Stream<Char>.withRollbackPrefix(rollbackPrefix: String): Stream<Char> {
+    if (this is StreamRollbackPrefix && this.rollbackPrefix == rollbackPrefix) {
+        return this
+    }
+    return DelegatingRollbackPrefixCharStream(this, rollbackPrefix)
+}
+
 fun Stream<String>.shareRevisable(
     scope: CoroutineScope,
     replay: Int = 0,
     started: StreamStart = StreamStart.EAGERLY,
-    onComplete: suspend () -> Unit = {}
+    onComplete: suspend () -> Unit = {},
+    propagateCompletionCause: Boolean = true,
 ): SharedStream<String> {
-    val sharedTextStream = share(scope = scope, replay = replay, started = started, onComplete = onComplete)
+    val sharedTextStream = share(
+        scope = scope,
+        replay = replay,
+        started = started,
+        onComplete = onComplete,
+        propagateCompletionCause = propagateCompletionCause,
+    )
     val carrier = this as? TextStreamEventCarrier ?: return sharedTextStream
-    val sharedEventStream =
-        carrier.eventChannel.share(scope = scope, replay = Int.MAX_VALUE, started = started)
+    val sharedEventStream = carrier.eventChannel.share(
+        scope = scope,
+        replay = Int.MAX_VALUE,
+        started = started,
+        propagateCompletionCause = propagateCompletionCause,
+    )
     return sharedTextStream.withEventChannel(sharedEventStream)
 }

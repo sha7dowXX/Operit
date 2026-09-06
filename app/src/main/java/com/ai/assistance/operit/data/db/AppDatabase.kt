@@ -6,28 +6,37 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
+import com.ai.assistance.operit.data.dao.ChatContentDao
 import com.ai.assistance.operit.data.dao.ChatDao
 import com.ai.assistance.operit.data.dao.MessageDao
 import com.ai.assistance.operit.data.dao.MessageVariantDao
+import com.ai.assistance.operit.data.dao.TokenUsageDao
 import com.ai.assistance.operit.data.model.ChatEntity
 import com.ai.assistance.operit.data.model.MessageEntity
 import com.ai.assistance.operit.data.model.MessageVariantEntity
-
+import com.ai.assistance.operit.data.model.TokenStatsModelEntity
+import com.ai.assistance.operit.data.model.TokenUsageRecordEntity
 /** 应用数据库，包含聊天表和消息表 */
 @Database(
-    entities = [ChatEntity::class, MessageEntity::class, MessageVariantEntity::class],
-    version = 20,
+    entities = [
+        ChatEntity::class,
+        MessageEntity::class,
+        MessageVariantEntity::class,
+        TokenUsageRecordEntity::class,
+        TokenStatsModelEntity::class,
+    ],
+    version = 21,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
-
     /** 获取聊天DAO */
     abstract fun chatDao(): ChatDao
 
     /** 获取消息DAO */
     abstract fun messageDao(): MessageDao
-
     abstract fun messageVariantDao(): MessageVariantDao
+    abstract fun chatContentDao(): ChatContentDao
+    abstract fun tokenUsageDao(): TokenUsageDao
 
     companion object {
         @Volatile
@@ -218,6 +227,121 @@ abstract class AppDatabase : RoomDatabase() {
                 }
             }
 
+        /** v20 -> v21: token statistics schema and Room-declared message indexes. */
+        internal val MIGRATION_20_21 =
+            object : Migration(20, 21) {
+                override fun migrate(db: SupportSQLiteDatabase) {
+                    runSql { db.execSQL(it) }
+                }
+
+                override fun migrate(connection: androidx.sqlite.SQLiteConnection) {
+                    runSql { sql ->
+                        val stmt = connection.prepare(sql)
+                        try {
+                            stmt.step()
+                        } finally {
+                            stmt.close()
+                        }
+                    }
+                }
+
+                private fun runSql(exec: (String) -> Unit) {
+                    // Released v20 databases created before MessageEntity declared indexes still need
+                    // these exact indexes before Room validates the migrated schema.
+                    exec(
+                        "CREATE INDEX IF NOT EXISTS `index_messages_chatId` " +
+                            "ON `messages` (`chatId`)"
+                    )
+                    exec(
+                        "CREATE INDEX IF NOT EXISTS `index_messages_chatId_timestamp` " +
+                            "ON `messages` (`chatId`, `timestamp`)"
+                    )
+                    exec(
+                        """
+                        CREATE TABLE IF NOT EXISTS `token_usage_records` (
+                            `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                            `importKey` TEXT,
+                            `occurredAtMs` INTEGER,
+                            `configId` TEXT NOT NULL,
+                            `provider` TEXT NOT NULL,
+                            `model` TEXT NOT NULL,
+                            `requestCount` INTEGER NOT NULL DEFAULT 1,
+                            `uncachedInputTokens` INTEGER,
+                            `cachedInputTokens` INTEGER,
+                            `cacheWriteTokens` INTEGER,
+                            `totalInputTokens` INTEGER,
+                            `outputTokens` INTEGER
+                        )
+                        """.trimIndent()
+                    )
+                    exec(
+                        "CREATE INDEX IF NOT EXISTS `index_token_usage_records_occurredAtMs` " +
+                            "ON `token_usage_records` (`occurredAtMs`)"
+                    )
+                    exec(
+                        "CREATE INDEX IF NOT EXISTS " +
+                            "`index_token_usage_records_provider_model_configId_occurredAtMs` " +
+                            "ON `token_usage_records` " +
+                            "(`provider`, `model`, `configId`, `occurredAtMs`)"
+                    )
+                    exec(
+                        """
+                        CREATE TABLE IF NOT EXISTS `token_stats_models` (
+                            `configId` TEXT NOT NULL,
+                            `provider` TEXT NOT NULL,
+                            `model` TEXT NOT NULL,
+                            `billingMode` TEXT,
+                            `currency` TEXT,
+                            `inputPricePerMillion` REAL,
+                            `cachedInputPricePerMillion` REAL,
+                            `cacheWritePricePerMillion` REAL,
+                            `outputPricePerMillion` REAL,
+                            `pricePerRequest` REAL,
+                            PRIMARY KEY(`configId`, `provider`, `model`)
+                        )
+                        """.trimIndent()
+                    )
+                    exec(
+                        "CREATE UNIQUE INDEX IF NOT EXISTS `index_token_usage_records_importKey` " +
+                            "ON `token_usage_records` (`importKey`)"
+                    )
+                    // Preserve token-bearing history before the new ledger starts recording requests.
+                    exec(
+                        """
+                        INSERT INTO `token_usage_records` (
+                            `occurredAtMs`, `configId`, `provider`, `model`,
+                            `requestCount`, `uncachedInputTokens`, `cachedInputTokens`, `totalInputTokens`, `outputTokens`
+                        )
+                        SELECT
+                            `timestamp`, '', `provider`, `modelName`, 1,
+                            MAX(`inputTokens` - `cachedInputTokens`, 0), `cachedInputTokens`,
+                            `inputTokens`, `outputTokens`
+                        FROM `messages`
+                        WHERE `sender` = 'ai'
+                            AND TRIM(`provider`) <> ''
+                            AND TRIM(`modelName`) <> ''
+                            AND (`inputTokens` > 0 OR `cachedInputTokens` > 0 OR `outputTokens` > 0)
+                        """.trimIndent()
+                    )
+                    exec(
+                        """
+                        INSERT INTO `token_usage_records` (
+                            `occurredAtMs`, `configId`, `provider`, `model`,
+                            `requestCount`, `uncachedInputTokens`, `cachedInputTokens`, `totalInputTokens`, `outputTokens`
+                        )
+                        SELECT
+                            `messageTimestamp`, '', `provider`, `modelName`, 1,
+                            MAX(`inputTokens` - `cachedInputTokens`, 0), `cachedInputTokens`,
+                            `inputTokens`, `outputTokens`
+                        FROM `message_variants`
+                        WHERE TRIM(`provider`) <> ''
+                            AND TRIM(`modelName`) <> ''
+                            AND (`inputTokens` > 0 OR `cachedInputTokens` > 0 OR `outputTokens` > 0)
+                        """.trimIndent()
+                    )
+                }
+            }
+
         // 定义从版本2到3的迁移
         private val MIGRATION_2_3 =
             object : Migration(2, 3) {
@@ -334,7 +458,8 @@ abstract class AppDatabase : RoomDatabase() {
                                 MIGRATION_16_17,
                                 MIGRATION_17_18,
                                 MIGRATION_18_19,
-                                MIGRATION_19_20
+                                MIGRATION_19_20,
+                                MIGRATION_20_21
                             ) // 添加新的迁移
                             .build()
                     INSTANCE = instance

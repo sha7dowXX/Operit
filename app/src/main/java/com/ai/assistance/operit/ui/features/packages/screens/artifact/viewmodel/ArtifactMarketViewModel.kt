@@ -1,8 +1,7 @@
 package com.ai.assistance.operit.ui.features.packages.screens.artifact.viewmodel
 
 import android.content.Context
-import android.content.Intent
-import android.net.Uri
+import android.content.SharedPreferences
 import android.widget.Toast
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
@@ -17,14 +16,16 @@ import com.ai.assistance.operit.data.api.MarketV2Entry
 import com.ai.assistance.operit.data.preferences.GitHubAuthPreferences
 import com.ai.assistance.operit.ui.features.packages.market.ArtifactMarketScope
 import com.ai.assistance.operit.ui.features.packages.market.ArtifactPublishClusterContext
-import com.ai.assistance.operit.ui.features.packages.market.ForgeRepoInfo
 import com.ai.assistance.operit.ui.features.packages.market.GitHubForgePublishService
+import com.ai.assistance.operit.ui.features.packages.market.GitHubReleaseCatalog
 import com.ai.assistance.operit.ui.features.packages.market.LocalPublishableArtifact
 import com.ai.assistance.operit.ui.features.packages.market.MarketRegistrationPayload
 import com.ai.assistance.operit.ui.features.packages.market.PublishArtifactRequest
+import com.ai.assistance.operit.ui.features.packages.market.PublishArtifactSource
 import com.ai.assistance.operit.ui.features.packages.market.PublishArtifactType
 import com.ai.assistance.operit.ui.features.packages.market.PublishAttemptResult
 import com.ai.assistance.operit.ui.features.packages.market.PublishProgressStage
+import com.ai.assistance.operit.ui.features.packages.market.effectiveToolPkgApiVersion
 import com.ai.assistance.operit.ui.features.packages.market.formatSupportedAppVersions
 import com.ai.assistance.operit.ui.features.packages.market.normalizeMarketArtifactId
 import com.ai.assistance.operit.ui.features.packages.market.normalizeAppVersionOrNull
@@ -33,7 +34,6 @@ import com.ai.assistance.operit.ui.features.packages.market.toMarketStatsType
 import com.ai.assistance.operit.ui.features.packages.market.toRankMetric
 import com.ai.assistance.operit.ui.features.packages.market.validateStandaloneArtifactRuntimePackageId
 import com.ai.assistance.operit.ui.features.packages.market.validateSupportedAppVersions
-import com.ai.assistance.operit.ui.features.github.GitHubOAuthCoordinator
 import com.ai.assistance.operit.util.AppLogger
 import java.io.File
 import kotlinx.coroutines.CancellationException
@@ -45,6 +45,23 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+
+data class ArtifactPublishDraft(
+    val selectedPackageName: String = "",
+    val displayName: String = "",
+    val description: String = "",
+    val detail: String = "",
+    val categoryId: String = "",
+    val allowPublicUpdates: Boolean = true,
+    val minifyArtifact: Boolean = false,
+    val useGitHubReleaseAsset: Boolean = false,
+    val githubRepositoryUrl: String = "",
+    val selectedReleaseTag: String = "",
+    val selectedReleaseAssetName: String = "",
+    val version: String = "1.0.0",
+    val minSupportedAppVersion: String = "",
+    val maxSupportedAppVersion: String = ""
+)
 
 class ArtifactMarketViewModel(
     private val context: Context,
@@ -80,6 +97,15 @@ class ArtifactMarketViewModel(
     private val _requiresForgeInitialization = MutableStateFlow(false)
     val requiresForgeInitialization: StateFlow<Boolean> = _requiresForgeInitialization.asStateFlow()
 
+    private val _githubReleaseCatalog = MutableStateFlow<GitHubReleaseCatalog?>(null)
+    val githubReleaseCatalog: StateFlow<GitHubReleaseCatalog?> = _githubReleaseCatalog.asStateFlow()
+
+    private val _githubReleaseCatalogError = MutableStateFlow<String?>(null)
+    val githubReleaseCatalogError: StateFlow<String?> = _githubReleaseCatalogError.asStateFlow()
+
+    private val _isLoadingGitHubReleaseCatalog = MutableStateFlow(false)
+    val isLoadingGitHubReleaseCatalog: StateFlow<Boolean> = _isLoadingGitHubReleaseCatalog.asStateFlow()
+
     val isLoggedIn: StateFlow<Boolean> =
         githubAuth.isLoggedInFlow.stateIn(
             scope = viewModelScope,
@@ -94,18 +120,53 @@ class ArtifactMarketViewModel(
         refreshPublishableArtifacts()
     }
 
-    fun initiateGitHubLogin(context: Context) {
-        viewModelScope.launch {
-            try {
-                val authUrl = GitHubOAuthCoordinator(context).createExternalAuthorizationUrl()
-                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(authUrl))
-                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                context.startActivity(intent)
-            } catch (e: Exception) {
-                _errorMessage.value = e.message ?: "Failed to open GitHub login"
-                AppLogger.e(TAG, "Failed to initiate GitHub login", e)
-            }
+    fun loadPublishDraft(publishContext: ArtifactPublishClusterContext?): ArtifactPublishDraft? {
+        val sharedPrefs = publishDraftPrefs(publishContext)
+        if (!sharedPrefs.contains(PUBLISH_DRAFT_SAVED_AT_KEY)) return null
+        return ArtifactPublishDraft(
+            selectedPackageName = sharedPrefs.getString("selectedPackageName", "") ?: "",
+            displayName = sharedPrefs.getString("displayName", "") ?: "",
+            description = sharedPrefs.getString("description", "") ?: "",
+            detail = sharedPrefs.getString("detail", "") ?: "",
+            categoryId = sharedPrefs.getString("categoryId", "") ?: "",
+            allowPublicUpdates = sharedPrefs.getBoolean("allowPublicUpdates", true),
+            minifyArtifact = sharedPrefs.getBoolean("minifyArtifact", false),
+            useGitHubReleaseAsset = sharedPrefs.getBoolean("useGitHubReleaseAsset", false),
+            githubRepositoryUrl = sharedPrefs.getString("githubRepositoryUrl", "") ?: "",
+            selectedReleaseTag = sharedPrefs.getString("selectedReleaseTag", "") ?: "",
+            selectedReleaseAssetName = sharedPrefs.getString("selectedReleaseAssetName", "") ?: "",
+            version = sharedPrefs.getString("version", "1.0.0") ?: "1.0.0",
+            minSupportedAppVersion = sharedPrefs.getString("minSupportedAppVersion", "") ?: "",
+            maxSupportedAppVersion = sharedPrefs.getString("maxSupportedAppVersion", "") ?: ""
+        )
+    }
+
+    fun savePublishDraft(
+        publishContext: ArtifactPublishClusterContext?,
+        draft: ArtifactPublishDraft
+    ) {
+        publishDraftPrefs(publishContext).edit().apply {
+            putString("selectedPackageName", draft.selectedPackageName)
+            putString("displayName", draft.displayName)
+            putString("description", draft.description)
+            putString("detail", draft.detail)
+            putString("categoryId", draft.categoryId)
+            putBoolean("allowPublicUpdates", draft.allowPublicUpdates)
+            putBoolean("minifyArtifact", draft.minifyArtifact)
+            putBoolean("useGitHubReleaseAsset", draft.useGitHubReleaseAsset)
+            putString("githubRepositoryUrl", draft.githubRepositoryUrl)
+            putString("selectedReleaseTag", draft.selectedReleaseTag)
+            putString("selectedReleaseAssetName", draft.selectedReleaseAssetName)
+            putString("version", draft.version)
+            putString("minSupportedAppVersion", draft.minSupportedAppVersion)
+            putString("maxSupportedAppVersion", draft.maxSupportedAppVersion)
+            putLong(PUBLISH_DRAFT_SAVED_AT_KEY, System.currentTimeMillis())
+            apply()
         }
+    }
+
+    fun clearPublishDraft(publishContext: ArtifactPublishClusterContext?) {
+        publishDraftPrefs(publishContext).edit().clear().apply()
     }
 
     fun logoutFromGitHub() {
@@ -133,8 +194,10 @@ class ArtifactMarketViewModel(
                                 packageName = source.packageName,
                                 displayName = source.displayName,
                                 description = source.description,
+                                author = source.author,
                                 sourceFile = File(source.sourcePath),
-                                inferredVersion = source.inferredVersion
+                                inferredVersion = source.inferredVersion,
+                                apiVersion = source.apiVersion
                             )
                         }
                         .sortedWith(compareBy<LocalPublishableArtifact> { it.type.ordinal }.thenBy { it.displayName.lowercase() })
@@ -153,7 +216,8 @@ class ArtifactMarketViewModel(
         version: String,
         minSupportedAppVersion: String?,
         maxSupportedAppVersion: String?,
-        publishContext: ArtifactPublishClusterContext? = null
+        publishContext: ArtifactPublishClusterContext? = null,
+        source: PublishArtifactSource,
     ) {
         val localArtifact = _publishableArtifacts.value.firstOrNull { it.packageName == packageName }
         if (localArtifact == null) {
@@ -162,7 +226,8 @@ class ArtifactMarketViewModel(
         }
 
         val resolvedDisplayName =
-            publishContext?.lockedDisplayName
+            publishContext?.takeUnless { it.canEditEntry }
+                ?.lockedDisplayName
                 ?.trim()
                 ?.takeIf { it.isNotBlank() }
                 ?: displayName
@@ -178,9 +243,29 @@ class ArtifactMarketViewModel(
                 version = version,
                 minSupportedAppVersion = minSupportedAppVersion,
                 maxSupportedAppVersion = maxSupportedAppVersion,
-                publishContext = publishContext
+                publishContext = publishContext,
+                source = source
             )
         executePublish(request, allowCreateForgeRepo = false)
+    }
+
+    fun loadGitHubReleaseCatalog(repositoryUrl: String) {
+        viewModelScope.launch {
+            _isLoadingGitHubReleaseCatalog.value = true
+            _githubReleaseCatalog.value = null
+            _githubReleaseCatalogError.value = null
+            forgePublishService.loadGitHubReleaseCatalog(repositoryUrl).fold(
+                onSuccess = { catalog ->
+                    _githubReleaseCatalog.value = catalog
+                },
+                onFailure = { error ->
+                    _githubReleaseCatalog.value = null
+                    _githubReleaseCatalogError.value = error.message ?: "Failed to load GitHub Releases"
+                    AppLogger.e(TAG, "Failed to load GitHub Release catalog", error)
+                }
+            )
+            _isLoadingGitHubReleaseCatalog.value = false
+        }
     }
 
     fun updatePublishedArtifact(
@@ -341,7 +426,7 @@ class ArtifactMarketViewModel(
                             is PublishAttemptResult.Success -> {
                                 pendingPublishRequest = null
                                 _publishProgressStage.value = PublishProgressStage.COMPLETED
-                                _publishSuccessMessage.value = buildSuccessMessage(result.forgeRepo, result.payload)
+                                _publishSuccessMessage.value = buildSuccessMessage(result.payload)
                             }
 
                             is PublishAttemptResult.RegistrationFailed -> {
@@ -419,7 +504,8 @@ class ArtifactMarketViewModel(
             projectDescription = trimmedDetail,
             runtimePackageId = versionValue?.runtimePackageId.orEmpty(),
             publisherLogin = entry.publisher?.login.orEmpty().ifBlank { entry.author?.login.orEmpty() },
-            forgeRepo = "",
+            releaseOwner = "",
+            releaseRepository = "",
             releaseTag = "",
             assetName = assetName,
             downloadUrl = assetValue?.url.orEmpty(),
@@ -427,10 +513,17 @@ class ArtifactMarketViewModel(
             version = versionValue?.version.orEmpty().trim().removePrefix("v").removePrefix("V").ifBlank { "1.0.0" },
             displayName = trimmedDisplayName,
             description = trimmedDescription,
+            detail = trimmedDetail,
             categoryId = entry.categoryId,
             sourceFileName = assetName,
             minSupportedAppVersion = normalizeAppVersionOrNull(minSupportedAppVersion),
-            maxSupportedAppVersion = normalizeAppVersionOrNull(maxSupportedAppVersion)
+            maxSupportedAppVersion = normalizeAppVersionOrNull(maxSupportedAppVersion),
+            apiVersion =
+                if (type == PublishArtifactType.PACKAGE) {
+                    (versionValue?.apiVersion).effectiveToolPkgApiVersion()
+                } else {
+                    null
+                }
         )
     }
 
@@ -527,7 +620,7 @@ class ArtifactMarketViewModel(
     }
     private fun resolvePublishDisplayName(request: PublishArtifactRequest): String {
         val lockedDisplayName = request.publishContext?.lockedDisplayName?.trim().orEmpty()
-        if (request.publishContext != null) {
+        if (request.publishContext != null && !request.publishContext.canEditEntry) {
             if (lockedDisplayName.isBlank()) {
                 throw IllegalStateException(getText(R.string.artifact_publish_locked_name_required))
             }
@@ -547,14 +640,15 @@ class ArtifactMarketViewModel(
             PublishProgressStage.ENSURING_REPO -> getText(R.string.artifact_publish_stage_ensuring_repo)
             PublishProgressStage.CREATING_RELEASE -> getText(R.string.artifact_publish_stage_creating_release)
             PublishProgressStage.UPLOADING_ASSET -> getText(R.string.artifact_publish_stage_uploading_asset)
+            PublishProgressStage.RESOLVING_RELEASE_ASSET -> getText(R.string.artifact_publish_stage_resolving_release_asset)
             PublishProgressStage.REGISTERING_MARKET -> getText(R.string.artifact_publish_stage_registering_market)
             PublishProgressStage.COMPLETED -> getText(R.string.artifact_publish_stage_completed)
         }
     }
 
-    private fun buildSuccessMessage(forgeRepo: ForgeRepoInfo, payload: MarketRegistrationPayload): String {
+    private fun buildSuccessMessage(payload: MarketRegistrationPayload): String {
         return appendMarketScheduleNotice(
-            "${payload.displayName} published to ${forgeRepo.ownerLogin}/${forgeRepo.repoName} ${payload.releaseTag} " +
+            "${payload.displayName} published to ${payload.releaseOwner}/${payload.releaseRepository} ${payload.releaseTag} " +
                 formatSupportedAppVersions(payload.minSupportedAppVersion, payload.maxSupportedAppVersion)
         )
     }
@@ -631,6 +725,28 @@ class ArtifactMarketViewModel(
         val suffix: String
     )
 
+    private fun publishDraftPrefs(publishContext: ArtifactPublishClusterContext?): SharedPreferences {
+        return context.getSharedPreferences(
+            "artifact_publish_draft_${publishDraftScope(publishContext)}",
+            Context.MODE_PRIVATE
+        )
+    }
+
+    private fun publishDraftScope(publishContext: ArtifactPublishClusterContext?): String {
+        val contextValue = publishContext ?: return "fresh"
+        val scopedId =
+            contextValue
+                .entryId
+                .trim()
+                .ifBlank { contextValue.runtimePackageId.trim() }
+                .ifBlank { contextValue.projectId.trim() }
+        if (scopedId.isBlank()) return "fresh"
+        return "entry_${sanitizePublishDraftScope(scopedId)}"
+    }
+
+    private fun sanitizePublishDraftScope(value: String): String =
+        value.replace(Regex("[^A-Za-z0-9_.-]"), "_")
+
     class Factory(
         private val context: Context,
         private val scope: ArtifactMarketScope
@@ -647,5 +763,6 @@ class ArtifactMarketViewModel(
     companion object {
         private const val TAG = "ArtifactMarketViewModel"
         private const val CURRENT_APP_VERSION = "1.11.0+5"
+        private const val PUBLISH_DRAFT_SAVED_AT_KEY = "savedAtEpochMs"
     }
 }

@@ -28,7 +28,7 @@ sudo apt update
 # 安装必要的工具、JDK 21、Node.js、npm 和 Python 3
 sudo apt install -y git wget unzip openjdk-21-jdk nodejs npm python3
 
-# 安装 pnpm（sync_example_packages.py 预构建 examples 时会用到）
+# 安装 pnpm（tools/example_packages/sync_example_packages.py 预构建 examples 时会用到）
 sudo npm install -g pnpm
 
 # 安装完成后，请验证 Java 版本是否正确
@@ -43,7 +43,7 @@ python3 --version
 ``` 
 **注意：** 项目官方要求 **JDK 21**。为确保最大兼容性，强烈建议优先安装和使用 JDK 21。
 
-**补充说明：** 项目中的 `web-chat` 使用 React + Vite 构建；`sync_example_packages.py` 会预构建 `examples/` 下的脚本包并打包 `.toolpkg`。因此除了 Android 环境外，还需要准备好 Node.js、npm、pnpm 和 Python 3。如果后续执行前端构建时提示 Node.js 版本过低，请升级到较新的 Node.js LTS 版本后再继续。
+**补充说明：** 项目中的 `web-chat` 使用 React + Vite 构建；`tools/example_packages/sync_example_packages.py` 会预构建 `examples/` 下的脚本包并打包 `.toolpkg`。因此除了 Android 环境外，还需要准备好 Node.js、npm、pnpm 和 Python 3。如果后续执行前端构建时提示 Node.js 版本过低，请升级到较新的 Node.js LTS 版本后再继续。
 
 ## **2. 第二步：安装 Android 命令行工具**
 
@@ -140,33 +140,7 @@ org.gradle.parallel=true
 # org.gradle.workers.max=8
 ``` 
 
-## **5. 第五步：配置 GitHub OAuth 应用**
-
-为了使应用的 GitHub 相关功能（如登录、MCP 包管理）能正常工作，你需要注册自己的 GitHub OAuth Application 并配置 Client ID。
-
-1. **创建 GitHub OAuth App:**  
-   - 访问你的 GitHub 开发者设置页面：[**GitHub Developer Settings**](https://github.com/settings/developers)
-   - 点击 **"New OAuth App"**。
-   - 填写以下信息：
-     - **Application name**: `Operit Dev` (或任何你喜欢的名字)
-     - **Homepage URL**: `https://github.com/<你的 GitHub 用户名>/Operit` (使用你 Fork 后的仓库地址)
-     - **Authorization callback URL**: `operit://github-oauth-callback` (**必须完全匹配！**)
-
-2. **获取 Client ID:**  
-   创建成功后，页面会显示生成的 **Client ID**。复制这个 ID。
-
-3. **配置项目:**  
-   - 在项目根目录，找到 `local.properties.example` 文件。
-   - 复制该文件并重命名为 `local.properties`。
-   - 打开 `local.properties` 文件，将 `"YOUR_OWN_GITHUB_CLIENT_ID_HERE"` 替换为你刚刚复制的 Client ID。
-
-   ```properties
-   # 示例:
-   GITHUB_CLIENT_ID=iv1.1234567890abcdef
-   ```
-   **注意：** `local.properties` 文件已被 Git 忽略，因此你的个人 ID 不会被提交到仓库中，确保了安全。
-
-## **6. 第六步：克隆并编译项目**
+## **5. 第五步：克隆并编译项目**
 
 环境准备就绪，现在开始编译项目。
 
@@ -175,10 +149,11 @@ org.gradle.parallel=true
 
 **推荐：先 Fork 后克隆你的仓库**  
 在 GitHub 打开上游仓库并点击 Fork： [AAswordman/Operit](https://github.com/AAswordman/Operit)  
-克隆你的 Fork（注意使用 --recurse-submodules）：
+克隆你的 Fork，并只初始化公开构建依赖 `terminal`：
 ```bash
-git clone --recurse-submodules https://github.com/<你的 GitHub 用户名>/Operit.git
+git clone https://github.com/<你的 GitHub 用户名>/Operit.git
 cd Operit
+git submodule update --init --recursive terminal
 ```  
 （可选）添加上游仓库以便同步更新：  
 ```bash
@@ -187,22 +162,22 @@ git remote add upstream https://github.com/AAswordman/Operit.git
 
 **备选：不 Fork，直接克隆上游仓库（只读）**  
 ```bash
-git clone --recurse-submodules https://github.com/AAswordman/Operit.git
+git clone https://github.com/AAswordman/Operit.git
 cd Operit
+git submodule update --init --recursive terminal
 ```  
 
-如果你已克隆但忘记带 --recurse-submodules，可在仓库目录中执行：  
+如果你已克隆但尚未初始化公开子模块，可在仓库目录中执行：
 ```bash
-git submodule update --init --recursive
+git submodule update --init --recursive terminal
 ```  
-如果你只想单独初始化 FBX 运行时依赖，也可以执行：  
+其中 DragonBonesCPP、`ufbx`、`Bullet3`、`Saba`、`ncnn`、`sherpa-ncnn`、WAMR、`llama.cpp`、QuickJS、MNN 和 MNN 使用的 KleidiAI 由 CMake 通过 `FetchContent` 获取。CMake 会先解析远端 ref 的 commit，再下载对应 GitHub archive，因此不会拉取完整 Git 历史；默认跟随各自上游主分支、固定提交或上游工程声明的 tag。如需覆盖某个 ref，可在 CMake 参数中设置 `OPERIT_DRAGONBONES_CPP_GIT_REF`、`OPERIT_UFBX_GIT_REF`、`OPERIT_BULLET3_GIT_REF`、`OPERIT_SABA_GIT_REF`、`OPERIT_NCNN_GIT_REF`、`OPERIT_SHERPA_NCNN_GIT_REF`、`OPERIT_WAMR_GIT_REF`、`OPERIT_LLAMA_CPP_GIT_REF`、`OPERIT_QUICKJS_GIT_REF`、`OPERIT_MNN_GIT_REF` 或 `OPERIT_KLEIDIAI_GIT_REF`。
+
+MNN 的 Android CMake 配置会在加入 MNN 子项目前，使用 MNN 自带的 FlatBuffers 源码编译一个宿主机 `flatc`，并从同一份 `schema/default/*.fbs` 重新生成 `schema/current/*.h`。因此构建机除了 Android NDK 和 CMake，还必须提供可用的宿主机 C/C++ 编译器；Linux 构建明确使用 `gcc` 和 `g++`，生成器不会使用 Android ABI 编译，也不会依赖工作区外的预生成头文件。
+
+2. **下载并放置非模型依赖库 (关键步骤！):**
+`README.md` 中提到，项目依赖一些需要手动下载的库。请从 [这个 Google Drive 链接](https://drive.google.com/drive/folders/1g-Q_i7cf6Ua4KX9ZM6V282EEZvTVVfF7?usp=sharing) 下载非模型文件，并将它们解压或放置到项目根目录下对应的 `libs` 或有 `.keep` 文件的文件夹中。  **警告：** 如果跳过此步骤，编译将因缺少依赖而失败。当前需要下载并解压这三个压缩包：`subpack.zip`、`jniLibs.zip`、`libs.zip`。默认本地 STT 模型不再通过 `models.zip` 准备，Android 构建会按 `app/config/stt-model-assets.properties` 从固定 Hugging Face 来源自动获取并校验。
 ```bash
-git submodule update --init fbx/third_party/ufbx
-```  
-2. **下载并放置依赖库 (关键步骤！):**  
-`README.md` 中提到，项目依赖一些需要手动下载的库。请从 [这个 Google Drive 链接](https://drive.google.com/drive/folders/1g-Q_i7cf6Ua4KX9ZM6V282EEZvTVVfF7?usp=sharing) 下载所有文件，并将它们解压或放置到项目根目录下对应的 `libs` 或有 `.keep` 文件的文件夹中。  **警告：** 如果跳过此步骤，编译将因缺少依赖而失败。当前需要下载并解压这四个压缩包：`models.zip`、`subpack.zip`、`jniLibs.zip`、`libs.zip`。  
-```bash
-./app/src/main/assets/models/.keep  
 ./app/src/main/assets/subpack/.keep  
 ./app/src/main/jniLibs/.keep
 ./app/libs
@@ -218,7 +193,7 @@ git checkout docs/add-building-guide
 ```bash
 npm install
 ```
-这一步会安装 `sync_example_packages.py` 预构建示例脚本包时需要用到的 `typescript`、`esbuild` 等依赖。
+这一步会安装 `tools/example_packages/sync_example_packages.py` 预构建示例脚本包时需要用到的 `typescript`、`esbuild` 等依赖。
 
 5. **安装 web-chat 的前端依赖:**
 ```bash
@@ -233,9 +208,9 @@ npm run build:webchat
 
 7. **打包 ToolPkg 并同步示例包到应用 assets (关键步骤！):**
 ```bash
-python3 ./sync_example_packages.py
+python3 ./tools/example_packages/sync_example_packages.py
 ```
-该命令会按 `packages_whitelist.txt` 预构建 `examples/` 下的脚本包，并将包含 `manifest.json` 或 `manifest.hjson` 的目录打包成 `.toolpkg`，最终输出到 `app/src/main/assets/packages/`。如果你修改了 `examples/` 下的脚本包代码，重新编译 APK 前也需要重新执行一次这一步。
+该命令会按 `tools/example_packages/packages_whitelist.txt` 预构建 `examples/` 下的脚本包，并将包含 `manifest.json` 或 `manifest.hjson` 的目录打包成 `.toolpkg`，最终输出到 `app/src/main/assets/packages/`。如果你修改了 `examples/` 下的脚本包代码，重新编译 APK 前也需要重新执行一次这一步。
 
 8. **为 Gradle 包装器添加可执行权限:**
 ```bash
@@ -265,7 +240,8 @@ app/build/outputs/apk/clone/app-clone.apk
 | sdkmanager: command not found | 环境变量未正确设置或生效。请检查 **~/.bashrc** 文件内容，并执行 source ~/.bashrc。 |
 | Could not determine Java version... | **JAVA_HOME** 环境变量不正确，或安装了错误的 JDK 版本。请确保已安装 **JDK 21** 并指向正确的路径。 |
 | NDK not found. | 确保已在 **第四步** 中使用 sdkmanager 安装了项目所需的 **ndk;25.1.8937393** 版本。 |
-| pnpm: command not found | 尚未安装 `pnpm`。请先执行 `sudo npm install -g pnpm`，再重新运行 `python3 ./sync_example_packages.py`。 |
+| pnpm: command not found | 尚未安装 `pnpm`。请先执行 `sudo npm install -g pnpm`，再重新运行 `python3 ./tools/example_packages/sync_example_packages.py`。 |
 | Missing web-chat/dist. Run `npm --prefix web-chat run build` first. | 尚未构建 `web-chat` 或构建失败。请先执行 `npm --prefix web-chat install`，再在项目根目录执行 `npm run build:webchat`。 |
-| ERROR: prebuild step failed | `sync_example_packages.py` 在预构建 `examples/` 时失败。请先确认已在项目根目录执行 `npm install`，并检查 `pnpm -v`、`python3 --version` 是否可用。 |
+| ERROR: prebuild step failed | `tools/example_packages/sync_example_packages.py` 在预构建 `examples/` 时失败。请先确认已在项目根目录执行 `npm install`，并检查 `pnpm -v`、`python3 --version` 是否可用。 |
+| `Failed to build the host FlatBuffers compiler` | MNN schema 生成阶段无法找到或运行宿主机 C/C++ 工具链。Linux 请安装 `gcc` 和 `g++`，其他平台请安装与当前平台匹配的编译器后重新运行 Gradle 构建。 |
 | You have not accepted the license agreements... | 你跳过了或未成功执行接受许可的步骤。请返回 **第四步** 执行 `yes |

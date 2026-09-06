@@ -70,6 +70,7 @@ data class ArtifactProjectRankDefaultVersionResponse(
     val runtimePackageId: String = "",
     val sha256: String = "",
     val version: String = "",
+    val apiVersion: String? = null,
     val downloadUrl: String = "",
     val state: String = "open",
     val publishedAt: String? = null
@@ -126,6 +127,7 @@ data class ArtifactProjectVersionResponse(
     val sourceFileName: String = "",
     val minSupportedAppVersion: String? = null,
     val maxSupportedAppVersion: String? = null,
+    val apiVersion: String? = null,
     val publishedAt: String? = null,
     val state: String = "open",
     val entry: MarketV2Entry
@@ -238,9 +240,18 @@ data class MarketV2PublisherEntrySummary(
     val type: String = "",
     val relation: String,
     val stateCode: String = "pending",
+    val listingState: String = "",
     val categoryId: String = "",
     val updatedAt: String = "",
-    val reasonCodes: List<String> = emptyList()
+    val reasonCodes: List<String> = emptyList(),
+    val reviewDetail: String? = null,
+    val reviewDetailUpdatedAt: String? = null,
+    /**
+     * Server-computed time at which a changes-requested revision may be
+     * submitted.  It is intentionally optional for older private shards and
+     * for entries that are not currently waiting for changes.
+     */
+    val revisionAvailableAt: String? = null
 )
 
 @Serializable
@@ -298,6 +309,7 @@ data class MarketV2Entry(
     val title: String = "",
     val description: String = "",
     val detail: String = "",
+    val logoUrl: String? = null,
     val authorId: String = "",
     val publisherId: String = "",
     val allowPublicUpdates: Boolean = true,
@@ -358,6 +370,9 @@ data class MarketV2Asset(
     val kind: String = "",
     val url: String = "",
     val sha256: String = "",
+    val ghOwner: String = "",
+    val ghRepo: String = "",
+    val ghReleaseTag: String = "",
     val name: String = "",
     val assetName: String = ""
 )
@@ -367,6 +382,7 @@ data class MarketV2Version(
     val id: String = "",
     val version: String = "",
     val formatVer: String = "",
+    val apiVersion: String? = null,
     val publisherId: String = "",
     val publisher: MarketV2Author? = null,
     val minAppVer: String? = null,
@@ -425,10 +441,19 @@ data class MarketV2PublishRequest(
 
 @Serializable
 data class MarketV2NewVersionRequest(
-    val entry: MarketV2EntryUpdateRequest? = null,
+    val entry: MarketV2NewVersionEntryPatch? = null,
     val version: MarketV2PublishVersion,
     val repoVersion: MarketV2PublishRepoVersion? = null,
     val asset: MarketV2PublishAsset? = null
+)
+
+@Serializable
+data class MarketV2NewVersionEntryPatch(
+    val title: String? = null,
+    val description: String? = null,
+    val detail: String? = null,
+    val categoryId: String? = null,
+    val allowPublicUpdates: Boolean? = null
 )
 
 @Serializable
@@ -445,6 +470,7 @@ data class MarketV2PublishVersion(
     val version: String,
     val formatVer: String,
     val minAppVer: String,
+    val apiVersion: String? = null,
     val maxAppVer: String? = null,
     val changelog: String? = null,
     val projectId: String? = null,
@@ -479,21 +505,6 @@ data class MarketV2PublishAsset(
 private data class MarketV2CommentCreateRequest(
     val body: String,
     val parentId: String? = null
-)
-
-@Serializable
-private data class MarketV2PublishProofRequest(
-    val owner: String,
-    val repo: String,
-    val releaseTag: String,
-    val assetName: String,
-    val sha256: String
-)
-
-@Serializable
-private data class MarketV2PublishProofResponse(
-    val ok: Boolean = false,
-    val proof: String = ""
 )
 
 class MarketStatsApiService {
@@ -717,6 +728,7 @@ class MarketStatsApiService {
                 sourceFileName = asset.assetName.ifBlank { asset.name },
                 minSupportedAppVersion = version.minAppVer,
                 maxSupportedAppVersion = version.maxAppVer,
+                apiVersion = version.apiVersion,
                 publishedAt = version.publishedAt,
                 state = version.stateCode.toPublicationState(),
                 entry = entry.copy(
@@ -840,6 +852,25 @@ class MarketStatsApiService {
             }
         }
 
+    /**
+     * Loads the authenticated publisher's full entry data, including an unpublished
+     * latest version. This is required to prepare a revision after review changes.
+     */
+    suspend fun getMyEntryDetail(entryId: String): Result<MarketV2Entry> =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                val resolvedEntryId = entryId.trim().ifBlank { error("Missing entry id") }
+                requestDynamic(
+                    method = "GET",
+                    pathSegments = listOf("market", "v2", "my", "entries", resolvedEntryId, "detail"),
+                    label = "getMyEntryDetail entryId=$resolvedEntryId"
+                ) { body, _ ->
+                    val response = json.decodeFromString(MarketV2EntryResponse.serializer(), body)
+                    response.item ?: response.entry ?: error("Entry detail not found")
+                }
+            }
+        }
+
     suspend fun getPublisherEntries(authorId: String): Result<List<MarketV2PublisherEntrySummary>> =
         withContext(Dispatchers.IO) {
             runCatching {
@@ -864,41 +895,6 @@ class MarketStatsApiService {
                     label = "getNotifications limit=$limit offset=$offset"
                 ) { body, _ ->
                     json.decodeFromString(MarketV2NotificationsResponse.serializer(), body).items
-                }
-            }
-        }
-
-    suspend fun publishProof(
-        owner: String,
-        repo: String,
-        releaseTag: String,
-        assetName: String,
-        sha256: String
-    ): Result<String> =
-        withContext(Dispatchers.IO) {
-            runCatching {
-                val requestJson =
-                    json.encodeToString(
-                        MarketV2PublishProofRequest(
-                            owner = owner,
-                            repo = repo,
-                            releaseTag = releaseTag,
-                            assetName = assetName,
-                            sha256 = sha256
-                        )
-                    )
-                requestDynamic(
-                    method = "POST",
-                    pathSegments = listOf("market", "v2", "publish", "proof"),
-                    body = requestJson,
-                    label = "publishProof owner=$owner repo=$repo"
-                ) { body, _ ->
-                    val response =
-                        json.decodeFromString(MarketV2PublishProofResponse.serializer(), body)
-                    require(response.ok && response.proof.isNotBlank()) {
-                        "Market proof generation failed"
-                    }
-                    response.proof
                 }
             }
         }
@@ -947,6 +943,16 @@ class MarketStatsApiService {
                             description = request.description,
                             detail = request.detail,
                             stateCode = "pending",
+                            latestVersion = MarketV2Version(
+                                version = request.version.version,
+                                formatVer = request.version.formatVer,
+                                apiVersion = request.version.apiVersion,
+                                minAppVer = request.version.minAppVer,
+                                maxAppVer = request.version.maxAppVer,
+                                projectId = request.version.projectId.orEmpty(),
+                                runtimePackageId = request.version.runtimePackageId.orEmpty(),
+                                stateCode = "pending"
+                            ),
                             source = request.source?.let { MarketV2Source(kind = it.kind, url = it.url) }
                         )
                     item
@@ -975,7 +981,7 @@ class MarketStatsApiService {
     suspend fun publishNewVersion(
         entryId: String,
         request: MarketV2PublishRequest,
-        includeEntryPatch: Boolean = false
+        entryPatch: MarketV2NewVersionEntryPatch? = null
     ): Result<MarketV2NewVersionResponse> =
         withContext(Dispatchers.IO) {
             runCatching {
@@ -986,18 +992,7 @@ class MarketStatsApiService {
                     body =
                         json.encodeToString(
                             MarketV2NewVersionRequest(
-                                entry =
-                                    if (includeEntryPatch) {
-                                        MarketV2EntryUpdateRequest(
-                                            title = request.title,
-                                            description = request.description,
-                                            detail = request.detail,
-                                            categoryId = request.categoryId,
-                                            allowPublicUpdates = request.allowPublicUpdates
-                                        )
-                                    } else {
-                                        null
-                                    },
+                                entry = entryPatch,
                                 version = request.version,
                                 repoVersion = request.repoVersion,
                                 asset = request.asset
@@ -1020,20 +1015,6 @@ class MarketStatsApiService {
                 ) { _, _ ->
                     (getEntry(entryId).getOrNull() ?: MarketV2Entry(id = entryId, stateCode = "withdrawn"))
                         .copy(stateCode = "withdrawn")
-                }
-            }
-        }
-
-    suspend fun resubmitEntry(entryId: String): Result<MarketV2Entry> =
-        withContext(Dispatchers.IO) {
-            runCatching {
-                requestDynamic(
-                    method = "POST",
-                    pathSegments = listOf("market", "v2", "entries", entryId, "resubmit"),
-                    label = "resubmitEntry entryId=$entryId"
-                ) { _, _ ->
-                    (getEntry(entryId).getOrNull() ?: MarketV2Entry(id = entryId, stateCode = "pending"))
-                        .copy(stateCode = "pending")
                 }
             }
         }
@@ -1097,12 +1078,12 @@ class MarketStatsApiService {
             requestBuilder.addHeader("Authorization", "Bearer ${ensureMarketSession()}")
         }
 
-        val requestBody = body?.toRequestBody(JSON_MEDIA_TYPE)
+        val resolvedRequestBody = body?.toRequestBody(JSON_MEDIA_TYPE)
         when (method.uppercase()) {
             "GET" -> requestBuilder.get()
-            "POST" -> requestBuilder.post(requestBody ?: ByteArray(0).toRequestBody(JSON_MEDIA_TYPE))
-            "PATCH" -> requestBuilder.patch(requestBody ?: ByteArray(0).toRequestBody(JSON_MEDIA_TYPE))
-            "DELETE" -> requestBuilder.delete(requestBody)
+            "POST" -> requestBuilder.post(resolvedRequestBody ?: ByteArray(0).toRequestBody(JSON_MEDIA_TYPE))
+            "PATCH" -> requestBuilder.patch(resolvedRequestBody ?: ByteArray(0).toRequestBody(JSON_MEDIA_TYPE))
+            "DELETE" -> requestBuilder.delete(resolvedRequestBody)
             else -> error("Unsupported HTTP method: $method")
         }
 
@@ -1269,6 +1250,7 @@ class MarketStatsApiService {
                     runtimePackageId = version?.runtimePackageId.orEmpty(),
                     sha256 = asset?.sha256.orEmpty(),
                     version = latestVersion?.version.orEmpty(),
+                    apiVersion = version?.apiVersion,
                     downloadUrl = asset?.id?.let(::downloadUrlForAsset).orEmpty(),
                     state = stateCode.toPublicationState(),
                     publishedAt = publishedAt ?: updatedAt

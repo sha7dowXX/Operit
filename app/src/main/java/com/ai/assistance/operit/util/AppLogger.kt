@@ -33,6 +33,7 @@ object AppLogger {
     private const val LOG_DIR_NAME = "logs"
     private const val LOG_FILE_NAME = "operit.log"
     private const val PACKAGE_LOG_DIR_NAME = "packageLogs"
+    private const val MAX_PACKAGE_LOG_FILES = 20
     private const val TOOLPKG_LOG_TAG = "ToolPkg"
     private const val MAX_LOG_MESSAGE_CHARS = 12_000
     private const val MAX_LOG_THROWABLE_CHARS = 24_000
@@ -40,6 +41,7 @@ object AppLogger {
     // Simple date formatter for log lines
     private val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.US)
     private val startupFileDateFormat = SimpleDateFormat("yyyyMMdd_HHmmss_SSS", Locale.US)
+    private val packageLogFileNamePattern = Pattern.compile("\\d{8}_\\d{6}_\\d{3}\\.log")
     private val packageIdRegexes = listOf(
         Pattern.compile("""\btoolPkgId=([A-Za-z0-9._:-]+)\b"""),
         Pattern.compile("""\bpackage(?:/subpackage)?=([A-Za-z0-9._:-]+)\b"""),
@@ -64,6 +66,13 @@ object AppLogger {
      */
     @Volatile
     var enableFileLogging: Boolean = true
+
+    /**
+     * JVM 单元测试开关：关闭对 [android.util.Log] 的调用（返回 0/false），避免
+     * 纯 JVM 环境抛 "not mocked" 异常。与 [enableFileLogging] 独立——文件日志照常。
+     */
+    @Volatile
+    var enableSystemLog: Boolean = true
 
     @Volatile
     private var logFile: File? = null
@@ -124,10 +133,30 @@ object AppLogger {
             val startupMs = OperitApplication.appStartupTimeMs.takeIf { it > 0L } ?: System.currentTimeMillis()
             val fileName = startupFileDateFormat.format(Date(startupMs)) + ".log"
             File(dir, fileName).also { file ->
+                // Prune before the first write so the new startup file fits within the cap.
+                if (!file.exists()) {
+                    prunePackageLogFiles(dir)
+                }
                 packageLogFile = file
             }
         } catch (_: Throwable) {
             null
+        }
+    }
+
+    private fun prunePackageLogFiles(dir: File) {
+        val files = dir.listFiles { file ->
+            file.isFile && packageLogFileNamePattern.matcher(file.name).matches()
+        }?.sortedBy { it.name } ?: return
+
+        var remainingFiles = files.size
+        for (file in files) {
+            if (remainingFiles < MAX_PACKAGE_LOG_FILES) {
+                break
+            }
+            if (file.delete()) {
+                remainingFiles -= 1
+            }
         }
     }
 
@@ -136,96 +165,96 @@ object AppLogger {
     @JvmStatic
     fun v(tag: String, msg: String): Int {
         writeToFile(VERBOSE, tag, msg, null)
-        return Log.v(tag, msg)
+        return if (enableSystemLog) Log.v(tag, msg) else 0
     }
 
     @JvmStatic
     fun v(tag: String, msg: String, tr: Throwable): Int {
         writeToFile(VERBOSE, tag, msg, tr)
-        return Log.v(tag, msg, tr)
+        return if (enableSystemLog) Log.v(tag, msg, tr) else 0
     }
 
     @JvmStatic
     fun d(tag: String, msg: String): Int {
         writeToFile(DEBUG, tag, msg, null)
-        return Log.d(tag, msg)
+        return if (enableSystemLog) Log.d(tag, msg) else 0
     }
 
     @JvmStatic
     fun d(tag: String, msg: String, tr: Throwable): Int {
         writeToFile(DEBUG, tag, msg, tr)
-        return Log.d(tag, msg, tr)
+        return if (enableSystemLog) Log.d(tag, msg, tr) else 0
     }
 
     @JvmStatic
     fun i(tag: String, msg: String): Int {
         writeToFile(INFO, tag, msg, null)
-        return Log.i(tag, msg)
+        return if (enableSystemLog) Log.i(tag, msg) else 0
     }
 
     @JvmStatic
     fun i(tag: String, msg: String, tr: Throwable): Int {
         writeToFile(INFO, tag, msg, tr)
-        return Log.i(tag, msg, tr)
+        return if (enableSystemLog) Log.i(tag, msg, tr) else 0
     }
 
     @JvmStatic
     fun w(tag: String, msg: String): Int {
         writeToFile(WARN, tag, msg, null)
-        return Log.w(tag, msg)
+        return if (enableSystemLog) Log.w(tag, msg) else 0
     }
 
     @JvmStatic
     fun w(tag: String, msg: String, tr: Throwable): Int {
         writeToFile(WARN, tag, msg, tr)
-        return Log.w(tag, msg, tr)
+        return if (enableSystemLog) Log.w(tag, msg, tr) else 0
     }
 
     @JvmStatic
     fun w(tag: String, tr: Throwable): Int {
         writeToFile(WARN, tag, "", tr)
-        return Log.w(tag, tr)
+        return if (enableSystemLog) Log.w(tag, tr) else 0
     }
 
     @JvmStatic
     fun e(tag: String, msg: String): Int {
         writeToFile(ERROR, tag, msg, null)
-        return Log.e(tag, msg)
+        return if (enableSystemLog) Log.e(tag, msg) else 0
     }
 
     @JvmStatic
     fun e(tag: String, msg: String, tr: Throwable): Int {
         writeToFile(ERROR, tag, msg, tr)
-        return Log.e(tag, msg, tr)
+        return if (enableSystemLog) Log.e(tag, msg, tr) else 0
     }
 
     @JvmStatic
     fun wtf(tag: String, msg: String): Int {
         writeToFile(ASSERT, tag, msg, null)
-        return Log.wtf(tag, msg)
+        return if (enableSystemLog) Log.wtf(tag, msg) else 0
     }
 
     @JvmStatic
     fun wtf(tag: String, msg: String, tr: Throwable): Int {
         writeToFile(ASSERT, tag, msg, tr)
-        return Log.wtf(tag, msg, tr)
+        return if (enableSystemLog) Log.wtf(tag, msg, tr) else 0
     }
 
     @JvmStatic
     fun wtf(tag: String, tr: Throwable): Int {
         writeToFile(ASSERT, tag, "", tr)
-        return Log.wtf(tag, tr)
+        return if (enableSystemLog) Log.wtf(tag, tr) else 0
     }
 
     @JvmStatic
     fun isLoggable(tag: String, level: Int): Boolean {
-        return Log.isLoggable(tag, level)
+        return enableSystemLog && Log.isLoggable(tag, level)
     }
 
     @JvmStatic
     fun println(priority: Int, tag: String, msg: String): Int {
         writeToFile(priority, tag, msg, null)
-        return Log.println(priority, tag, msg)
+        return if (enableSystemLog) Log.println(priority, tag, msg) else 0
     }
 
     @JvmStatic

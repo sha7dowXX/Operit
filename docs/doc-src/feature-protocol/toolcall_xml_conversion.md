@@ -39,6 +39,8 @@
 
 因此上层始终看到 XML，兼容旧逻辑。
 
+模型配置的新建默认值为 `true`，首次初始化的默认 DeepSeek 配置同样开启 Tool Call。已保存配置中的显式开关值不会因默认值调整而改变。
+
 ---
 
 ## 2. 不启用 Tool Call（enableToolCall = false）
@@ -76,6 +78,8 @@
 
 - `tools`: 由 `ToolPrompt` + 结构化参数构建的 JSON Schema
 - `tool_choice`: `"auto"`
+
+工具参数 schema 中的 `required` 固定输出为数组；无必填参数时输出空数组，避免兼容 OpenAI-style 校验器时被识别为 null。
 
 ### B. 历史消息转换
 

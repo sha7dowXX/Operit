@@ -6,22 +6,49 @@
 
 脚本主要使用 **TypeScript** 编写，以利用其强大的类型系统，但也可以使用原生 JavaScript (ES6+)。
 
-## 2. 快速上手
+## 2. 先确定开发场景
 
-**📝 最简单的方式：直接编写 JavaScript**
+不要把“开发插件”和“修改 Operit 主仓”混为一件事。两者使用不同的目录、资料和调试路径。
 
-如果你只是想快速编写脚本，不想配置任何环境，可以直接创建 `.js` 文件并编写 JavaScript 代码。不需要安装 TypeScript、不需要编译，只需要一个文本编辑器即可。参考 **[第 4 章：编写第一个脚本](#4-编写第一个脚本-typescript)** 中的代码结构，去掉类型标注即可。
+### 应用内 AI 协作开发
 
-**对于需要更好开发体验的开发者，我们提供了两种不同的开发路径：**
+这是普通 Sandbox Package 作者的默认流程。先更新并运行 `SandboxPackage_DEV` 安装脚本，再在 `/sdcard/Download/Operit/dev_package/{packageId}/` 中开发。宿主类型放在同级的 `/sdcard/Download/Operit/dev_package/types/`，具体步骤以安装后的 `SKILL.md` 为准。
 
-*   **路径 A：在 Operit 项目中直接开发 (推荐)**: 这是最简单快捷的方式，无需手动配置环境。适合想要快速编写脚本并贡献给主项目的开发者。
-*   **路径 B：创建独立的脚本项目 (高级)**: 如果你想创建和维护自己的脚本仓库，或者将脚本作为独立产品发布，可以选择此路径。这需要你手动完成项目的搭建。
+### 独立插件作者
+
+独立插件作者可在发布页面选择两条路线：直接上传当前本地包，或引用自己 GitHub Release 中的资产。单独 Git 仓库适合需要独立维护源码、构建脚本、版本与 Release 的插件；它不是市场发布的前提。
+
+### Operit 源码贡献者
+
+只有需要修改 Operit 应用本身、内置示例或 Android 宿主能力时，才进入主仓开发流程。这要求克隆主仓、安装依赖并使用 ADB 调试工具，不能把它当作普通插件作者的默认起点。
 
 ---
 
-### 路径 A: 在 Operit 项目中直接开发 (5分钟快速入门)
+## 发布到插件市场
 
-这是最推荐的入门方式。Operit 项目本身就是一个功能完备的开发环境，让你免于手动配置。
+市场发布支持两条路线，它们对应不同的开发维护方式：
+
+1. 直接上传当前本地包。适合只发布当前构建产物的作者。完成代码、打包和包内容核对后，在 Operit 发布页面选择本地包并直接上传；不需要创建或维护 Git 仓库。Operit 会在当前 GitHub 账号的 `OperitForge` 仓库创建或更新 Release，并登记市场。
+2. 引用 GitHub Release 资产。适合长期维护插件仓库的作者。仓库应持续保存源码、manifest、构建脚本和依赖清单，并维护 `.gitignore` 以排除依赖目录、编辑器文件和设备临时文件。作者自行决定公开程度与许可证；公开仓库可以独立分享、被 clone、获得协作和 star，市场只是其中一个分发入口。每次发布由作者构建资产、更新版本、整理提交与 tag、创建 GitHub Release，再在 Operit 中登记市场。
+
+引用 GitHub Release 资产时，按下面顺序操作：
+
+1. 选择本地已构建的插件文件。
+2. 在“发布资源来源”中选择“引用 GitHub Release 资产”。
+3. 填写作者仓库链接，加载后选择 Release 和对应资产。
+4. 填写插件名称、介绍、分类、版本和支持的软件版本，确认市场登记。
+
+Operit 会核对 Release 资产与本地所选文件是否相同，并由市场服务确认该 Release 的创建者就是当前登录的 GitHub 作者。Release 正文只保留作者自己的发布说明，不需要添加 Operit 标记、校验文本或其他额外内容。
+
+发布页面会自动保存未提交的表单草稿，并在市场登记成功后清空对应草稿。ToolPkg 的发布版本来自包内 manifest，识别后发布页不允许手动修改登记版本号。被审核打回后的修改版能否提交由市场服务在提交时判定，客户端只展示服务端返回的结果。
+
+仓库可以只维护一个插件，也可以由作者自行组织多个插件；市场不要求固定的仓库数量。引用 Release 路线的关键是持续维护 Git 项目，直接上传路线的关键是只负责当前包的构建与 UI 上传。
+
+---
+
+### Operit 源码贡献者：在项目中开发
+
+本节只面向需要改动 Operit 主仓的贡献者。普通插件作者请使用前述应用内 Skill 工作流或自己的独立插件仓库。
 
 **步骤 1: 克隆项目并安装依赖**
 
@@ -118,18 +145,18 @@ cd ..
 
 # 执行脚本的 `hello_world` 函数
 # Windows:
-tools\\execute_js.bat examples\\my_first_script.js hello_world "{\\"name\\":\\"世界\\"}"
+tools\\adb\\execute_js.bat examples\\my_first_script.js hello_world "{\\"name\\":\\"世界\\"}"
 # Linux / macOS:
-./tools/execute_js.sh examples/my_first_script.js hello_world '{"name":"世界"}'
+./tools/adb/execute_js.sh examples/my_first_script.js hello_world '{"name":"世界"}'
 ```
 
 如果你要直接运行整段 sandbox script，而不是指定某个导出函数：
 
 ```bash
 # Windows:
-tools\\run_sandbox_script.bat examples\\my_first_script.js "{\\"name\\":\\"世界\\"}"
+tools\\adb\\run_sandbox_script.bat examples\\my_first_script.js "{\\"name\\":\\"世界\\"}"
 # Linux / macOS:
-./tools/run_sandbox_script.sh examples/my_first_script.js '{"name":"世界"}'
+./tools/adb/run_sandbox_script.sh examples/my_first_script.js '{"name":"世界"}'
 ```
 
 **步骤 5: 查看结果**
@@ -142,7 +169,7 @@ tools\\run_sandbox_script.bat examples\\my_first_script.js "{\\"name\\":\\"世�
 
 ---
 
-### 路径 B: 创建独立的脚本项目
+### 独立插件仓库
 
 如果你希望独立管理你的脚本，可以按照以下步骤从零开始搭建一个开发环境。
 
@@ -284,6 +311,7 @@ my-script-project/
 METADATA
 {
     "name": "Automatic_bilibili_assistant",
+    "version": "1.0.0",
     "display_name": {
         "zh": "B站智能助手",
         "en": "Bilibili Assistant"
@@ -313,6 +341,7 @@ METADATA
 ```
 
 -   `name`: 脚本的唯一标识符。
+-   `version`: （可选）脚本包自身的版本号，建议使用 `major.minor.patch` 格式；ToolPkg 的 `requires[].min_version` / `requires[].max_version` 会使用这个版本进行约束检查。
 -   `display_name`: （可选，推荐）用于界面显示的名称。不会影响脚本 ID；脚本 ID 仍由 `name` 决定。支持字符串或多语言对象（见 3.1.2）。
 -   `description`: 对脚本功能的详细描述。
 -   `author`: （可选）作者信息，支持单个字符串或字符串数组。
@@ -827,7 +856,21 @@ TypeScript 脚本 (`.ts`) 需要被编译成 JavaScript (`.js`)才能被执行�
 
 - **Android SDK (ADB)**: 确保你已经安装了 Android SDK，并且 `adb` 命令在你的系统路径中可用。
 - **安卓设备**: 连接一台开启了“USB调试”功能的安卓设备，并已授权电脑进行调试。
-- **Operit 应用程序**: 确保 `com.ai.assistance.operit` 应用程序已经安装并在目标设备上运行。脚本的执行依赖于应用内的 `ScriptExecutionReceiver` 来接收和处理来自 ADB 的命令。
+- **Operit 应用程序**: 确保 `com.ai.assistance.operit.debug` 或 `com.ai.assistance.operit` 已经安装并在目标设备上运行。脚本会优先选择已安装的 Debug 包；也可以通过 `OPERIT_APP_PACKAGE` 指定其中一个。脚本的执行依赖于应用内的 `ScriptExecutionReceiver` 来接收和处理来自 ADB 的命令。
+
+如果 Debug 和 Release APK 同时安装，默认使用 `com.ai.assistance.operit.debug`。想调试 Release APK 时，在启动脚本前设置：
+
+```cmd
+set OPERIT_APP_PACKAGE=com.ai.assistance.operit
+```
+
+Linux/macOS 使用：
+
+```bash
+export OPERIT_APP_PACKAGE=com.ai.assistance.operit
+```
+
+脚本会输出实际选择的 applicationId，并据此生成临时目录、广播 action 和 receiver。
 
 ### 9.2. 执行脚本函数
 
@@ -838,7 +881,7 @@ TypeScript 脚本 (`.ts`) 需要被编译成 JavaScript (`.js`)才能被执行�
 打开命令行工具，执行以下命令：
 
 ```cmd
-tools\\execute_js.bat <JS文件路径> <要调用的函数名> [JSON格式的参数]
+tools\\adb\\execute_js.bat <JS文件路径> <要调用的函数名> [JSON格式的参数]
 ```
 
 **示例：**
@@ -846,7 +889,7 @@ tools\\execute_js.bat <JS文件路径> <要调用的函数名> [JSON格式的参
 假设我们要执行 `my_new_script.js` 中的 `hello_world` 函数，并传入参数 `{ "name": "世界" }`：
 
 ```cmd
-tools\\execute_js.bat examples\\my_new_script.js hello_world "{\\"name\\":\\"世界\\"}"
+tools\\adb\\execute_js.bat examples\\my_new_script.js hello_world "{\\"name\\":\\"世界\\"}"
 ```
 
 - 如果连接了多台设备，脚本会提示你选择要操作的设备。
@@ -854,7 +897,7 @@ tools\\execute_js.bat examples\\my_new_script.js hello_world "{\\"name\\":\\"世
 
 ### 9.3. 查看输出和调试
 
-脚本执行后，`tools/execute_js.*` 不再依赖 `adb logcat` 抓输出，而是会等待应用写出一份**结构化结果 JSON**。终端里会直接打印这份 JSON，其中包含：
+脚本执行后，`tools/adb/execute_js.*` 不再依赖 `adb logcat` 抓输出，而是会等待应用写出一份**结构化结果 JSON**。终端里会直接打印这份 JSON，其中包含：
 
 - `success`
 - `result`
@@ -867,7 +910,7 @@ tools\\execute_js.bat examples\\my_new_script.js hello_world "{\\"name\\":\\"世
 如果脚本执行时间比较长，可以通过环境变量调整等待时间：
 
 ```bash
-OPERIT_RESULT_WAIT_SECONDS=30 ./tools/execute_js.sh examples/my_script.js main '{}'
+OPERIT_RESULT_WAIT_SECONDS=30 ./tools/adb/execute_js.sh examples/my_script.js main '{}'
 ```
 
 这样就完成了一个从编写到设备上测试的完整开发循环。 
@@ -907,20 +950,20 @@ VS Code 会自动打开一个新的终端面板，并执行相应的脚本，你
         {
             "label": "运行JavaScript到Android设备",
             "type": "shell",
-            "command": ".\\tools\\execute_js.bat",
+            "command": ".\\tools\\adb\\execute_js.bat",
             "args": [
                 "${fileDirname}\\${fileBasenameNoExtension}.js",
                 "${input:jsFunction}",
                 "${input:jsParameters}"
             ],
             "windows": {
-                "command": ".\\tools\\execute_js.bat"
+                "command": ".\\tools\\adb\\execute_js.bat"
             },
             "linux": {
-                "command": "./tools/execute_js.sh"
+                "command": "./tools/adb/execute_js.sh"
             },
             "osx": {
-                "command": "./tools/execute_js.sh"
+                "command": "./tools/adb/execute_js.sh"
             },
             "problemMatcher": [],
             "group": {
@@ -958,20 +1001,20 @@ VS Code 会自动打开一个新的终端面板，并执行相应的脚本，你
             ],
             "dependsOrder": "sequence",
             "type": "shell",
-            "command": ".\\tools\\execute_js.bat",
+            "command": ".\\tools\\adb\\execute_js.bat",
             "args": [
                 "${fileDirname}\\${fileBasenameNoExtension}.js",
                 "${input:jsFunction}",
                 "${input:jsParameters}"
             ],
             "windows": {
-                "command": ".\\tools\\execute_js.bat"
+                "command": ".\\tools\\adb\\execute_js.bat"
             },
             "linux": {
-                "command": "./tools/execute_js.sh"
+                "command": "./tools/adb/execute_js.sh"
             },
             "osx": {
-                "command": "./tools/execute_js.sh"
+                "command": "./tools/adb/execute_js.sh"
             },
             "problemMatcher": [],
             "group": "test",

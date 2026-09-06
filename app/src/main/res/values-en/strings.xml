@@ -227,6 +227,12 @@
     <string name="workflow_execution_log_node_title">Node logs: %1$s</string>
     <string name="workflow_execution_log_empty">No execution logs yet</string>
     <string name="workflow_execution_log_empty_for_node">No logs for node: %1$s</string>
+    <string name="workflow_execution_log_failure_stage">Failure stage: %1$s</string>
+    <string name="workflow_execution_log_failure_reason">Original exception: %1$s</string>
+    <string name="workflow_execution_failure_stage_startup">Workflow startup</string>
+    <string name="workflow_execution_failure_stage_runtime_initialization">Runtime initialization</string>
+    <string name="workflow_execution_failure_stage_execution">Workflow execution</string>
+    <string name="workflow_execution_failure_stage_cancellation">Execution cancelled</string>
     <string name="workflow_edit_dialog_title">Edit Workflow</string>
     <string name="workflow_enabled_label">Enable workflow</string>
     <string name="workflow_disabled">Disabled</string>
@@ -720,6 +726,11 @@
 
     <!-- Context Menu -->
     <string name="copy_message">Copy Message</string>
+    <string name="markdown_source">Markdown source</string>
+    <string name="xml_source">XML source</string>
+    <string name="copy_plain_text">Copy plain text</string>
+    <string name="copy_markdown_source">Copy Markdown source</string>
+    <string name="copy_xml_source">Copy XML source</string>
     <string name="chat_hidden_user_message_placeholder">Auto-triggered user message (content hidden)</string>
     <string name="chat_hidden_user_message_badge">AUTO</string>
     <string name="info">Info</string>
@@ -772,6 +783,7 @@
     <string name="exit_multi_select">Exit Multi-select</string>
     <string name="select_all_messages">Select all</string>
     <string name="clear_selection">Cancel</string>
+    <string name="multi_select_actions">Actions</string>
     <string name="delete_selected">Delete Selected</string>
     <string name="share_selected">Share</string>
     <string name="add_selected_to_memory">Add to summary memory</string>
@@ -828,6 +840,15 @@
     <string name="theme_bg_opacity">Background opacity: %1$d%%</string>
     <string name="theme_reset">Reset to Default Theme</string>
     <string name="theme_saved">Settings saved</string>
+    <string name="theme_select_target">Select theme target</string>
+    <string name="theme_unsaved_title">Save theme changes?</string>
+    <string name="theme_unsaved_message">Changes for the current theme target have not been saved.</string>
+    <string name="theme_save_failed">Failed to save theme</string>
+    <string name="theme_save_and_continue">Save and continue</string>
+    <string name="theme_discard_and_continue">Don\'t save</string>
+    <string name="theme_edit_target_character">Current character theme</string>
+    <string name="theme_edit_target_group">Current character group theme</string>
+    <string name="theme_target_switch_failed">Failed to switch theme target</string>
     <string name="theme_video_too_large">Video file is too large and may cause lag or crashes. Please select videos less than 30MB.</string>
     <string name="theme_video_saved">Background video saved</string>
     <string name="theme_image_saved">Background image saved</string>
@@ -891,8 +912,8 @@
     
     <!-- Settings Screen Sections -->
     <string name="settings_section_personalization">Personalization</string>
-    <string name="settings_user_preferences">User Preferences</string>
-    <string name="settings_user_preferences_desc">Edit the user.md document sent to the AI as user context</string>
+    <string name="settings_user_preferences">User Profile Settings</string>
+    <string name="settings_user_preferences_desc">Manage user profiles and associated memory spaces</string>
     <string name="settings_configure_preferences">Configure Preferences</string>
     <string name="settings_model_prompts">Model Prompt Settings</string>
     <string name="settings_model_prompts_desc">Customize AI assistant\'s system prompts, including self-introduction and tone style, to better meet your expectations</string>
@@ -1006,19 +1027,29 @@
     <!-- User Preferences -->
     <string name="user_preferences_guide">Personalization</string>
     <string name="user_preferences">User Preferences</string>
-    <string name="user_preferences_settings">User Profile (user.md)</string>
-    <string name="user_md_description">The single user profile file. When enabled, this Markdown is sent to the AI as user context.</string>
+    <string name="user_preferences_settings">User Profile Settings</string>
+    <string name="user_md_description">The user.md for the selected user configuration is sent to the AI as user context.</string>
     <string name="user_md_edit_tab">Edit</string>
     <string name="user_md_preview_tab">Preview</string>
-    <string name="user_md_reset">Clear document</string>
     <string name="user_md_legacy_archive">Legacy profiles</string>
     <string name="user_md_unsaved_title">Discard unsaved changes?</string>
     <string name="user_md_unsaved_message">Your changes to user.md will be lost.</string>
     <string name="user_md_discard">Discard</string>
-    <string name="user_md_reset_title">Clear user.md?</string>
-    <string name="user_md_reset_message">The current draft will be replaced with an empty document and takes effect after saving.</string>
     <string name="user_md_editor_placeholder">Describe your background, habits, and how you want the AI to communicate…</string>
     <string name="user_md_preview_empty">user.md is empty. Add some content to preview it here.</string>
+    <string name="user_configuration_select">Select user configuration</string>
+    <string name="user_configuration_active">Active configuration</string>
+    <string name="user_configuration_policy">Automatic updates and locking</string>
+    <string name="user_configuration_open_memory">Open associated memory space</string>
+    <string name="user_configuration_create">Create user configuration</string>
+    <string name="user_configuration_rename">Rename user configuration</string>
+    <string name="user_configuration_delete">Delete user configuration</string>
+    <string name="user_configuration_name">User configuration name</string>
+    <string name="user_configuration_delete_warning">Delete user configuration “%1$s” and all associated memories? This action cannot be undone.</string>
+    <string name="user_configuration_auto_update">Automatically update profile</string>
+    <string name="user_configuration_lock">Lock automatic profile updates</string>
+    <string name="user_configuration_auto_update_desc">When enabled, long-term memory analysis updates user.md from conversations in the associated space. Locking blocks automatic updates only; manual editing remains available.</string>
+    <string name="user_configuration_unlock_notice">This configuration was locked during migration from older settings. Saving removes the document-wide lock.</string>
     <string name="custom_description">Custom Introduction</string>
     <string name="preferences_hint">Enter your personal introduction (max 100 characters)</string>
     <string name="enter_preferences">Enter your personal introduction here...</string>
@@ -1070,9 +1101,14 @@
     <string name="open_file_manager">Open File Manager</string>
     <string name="navigate_to_external_files">Please navigate to Android/data/com.ai.assistance.operit/files/packages directory</string>
     <string name="package_js_only">Only JavaScript (.js) and ToolPkg (.toolpkg) files are supported</string>
+    <string name="pkg_toolpkg_api_version">ToolPkg API: %1$s</string>
+    <string name="toolpkg_api_version_label">ToolPkg API version</string>
+    <string name="toolpkg_api_version_value">ToolPkg API version: %1$s</string>
+    <string name="pkg_toolpkg_requires">Required packages: %1$s</string>
     <string name="pkg_toolpkg_subpackages">ToolPkg Subpackages</string>
     <string name="pkg_toolpkg_version">Version: %1$s</string>
     <string name="pkg_toolpkg_resources">Resources: %1$d</string>
+    <string name="pkg_toolpkg_wasm_modules">WASM modules: %1$d</string>
     <string name="pkg_toolpkg_ui_modules">UI modules: %1$d</string>
     <string name="pkg_toolpkg_empty_subpackages">This ToolPkg does not declare any subpackages</string>
     <string name="pkg_toolpkg_tool_count">Tools: %1$d</string>
@@ -1116,23 +1152,27 @@
     <!-- User Agreement Screen -->
     <string name="agreement_title">User Agreement and Privacy Policy</string>
     <string name="agreement_subtitle">Please read and agree to the following terms before use.</string>
+    <string name="agreement_version">Agreement version: %1$s</string>
     <string name="agreement_human_readable_title">Plain Language Version (Not a legal document)</string>
-    <string name="agreement_human_readable_content">Like you, we don\'t like long and tedious agreements. Simply put:\n\nOperitAI is a free and open-source software. Its automation features are powerful, so please use them only for personal learning and daily assistance, not for any commercial or prohibited purposes.\n\nYou are responsible for all your actions. We are not responsible for any extensions you add or modifications you make to the software.\n\nRegarding privacy: Your voice processing is done locally on your device, which is secure. AI chat data is sent directly to the AI service provider, and we do not handle it.</string>
+    <string name="agreement_human_readable_content">Service boundary: Operit does not provide publicly available anthropomorphic emotional interaction services. Operit is an open-source client that runs locally on your device. It does not operate model inference services, host chat sessions or interaction data, or distribute shared model credentials. Cloud model requests are sent directly from your device to the model provider you configure with your own credentials; related data is governed by the rules of that provider. Local models run inference on your device.\n\nThis app can call files, terminals, automation, Root, ADB, extensions, and similar capabilities. Check operations before running them, back up important data, and grant permissions carefully. Losses involving devices, data, accounts, or other interests caused by user actions, user configuration, third-party services, or third-party extensions should be handled by the actual operator under applicable law.\n\nThird-party plugins, scripts, Skills, toolkits, and other marketplace content belong to their labelled authors or right holders, together with related responsibility. Marketplace listing or installation does not mean Operit guarantees, endorses, or obtains rights to that content. Confirm the license and rights status before using, modifying, publishing, or redistributing it.</string>
     <string name="agreement_serious_title">Formal Legal Agreement</string>
     <string name="agreement_serious_content"><![CDATA[
-        <p>Welcome to OperitAI. This software is modified and distributed under the terms of the GNU Lesser General Public License, version 3 (LGPLv3).</p>
-        <p><b>1. No Warranty</b><br>This software is provided "as is" without any warranty of any kind, express or implied, including but not limited to the warranties of merchantability, fitness for a particular purpose, and non-infringement. The entire risk as to the quality and performance of the software is with you.</p>
-        <p><b>2. Limitation of Liability</b><br>In no event unless required by applicable law or agreed to in writing will any contributor be liable to you for damages, including any general, special, incidental, or consequential damages arising out of the use or inability to use the software. <b>Furthermore, the development team is not responsible for any consequences arising from user-installed extension packages (such as MCPs) or from modifications made to this software.</b></p>
-        <p><b>3. User Responsibility and Usage Restrictions</b><br>You are fully responsible for any operations conducted through this software and for all their consequences. You agree to use this software for lawful and proper personal purposes and agree that:<br>
-        a. The automation features included in this software are intended for personal learning, research, and daily assistance only.<br>
-        b. <b>It is strictly prohibited to use this software and its features for any form of commercial or for-profit activities, or for large-scale automated operations that may improperly affect third-party services.</b><br>
-        c. You will be solely responsible for compensating any damages caused to third parties resulting from your use of this software. The community reserves the right to hold you accountable for any misuse.</p>
-        <p><b>4. Privacy Protection</b><br>We respect and protect the privacy of all our users. We commit to the following:<br>a. <b>Local Processing:</b> The voice recognition and speech synthesis features of this application operate entirely on your device. Related data will not be uploaded to any cloud servers.<br>b. <b>Third-Party AI Services:</b> The AI chat service used by this application is supported by third-party large model providers (such as DeepSeek). When you use this feature, your conversation data is sent directly to the respective service provider and does not pass through or get stored on our servers. We recommend that you also review and understand the privacy policies of the respective AI service providers.<br>c. <b>Data Security:</b> Apart from the cases mentioned above, we do not actively collect or store any of your personal information and will take reasonable data security measures to protect the local data necessary for the application\'s operation.</p>
-        <p><b>5. Agreement Modification</b><br>We reserve the right to modify these terms at any time. You can review the most current version of the agreement within the application. Your continued use of the service constitutes your acceptance of the revised terms.</p>
+        <p><b>Operit User Agreement and Privacy Policy</b><br>Version: 2026-07-15; intended effective date: July 15, 2026.</p>
+        <p><b>1. Scope and Agreement Version</b><br>This agreement applies to the officially released Operit Android client and its optional online features. By using this app, you confirm that you have read and accepted the current version. The app records the agreement version you have accepted at startup; when the agreement is materially updated, the app will require you to confirm the new version before continuing. The open-source code in the repository is licensed under the GNU Lesser General Public License version 3 (LGPLv3) in the root <code>LICENSE</code> file. This agreement does not exclude or reduce rights granted by applicable law or open-source licenses.</p>
+        <p><b>2. Product Positioning and Third-Party Services</b><br>Operit is open-source client software. It does not provide large language model inference, shared API Keys, chat request relay, or cloud hosting of chat records. Cloud models, cloud voice, search, image generation, MCP, and other network features are selected, configured, and enabled by you. When you use those services, data is sent directly to the corresponding service provider and is governed by the terms and privacy policy of that provider. You should evaluate the safety, legality, and suitability of providers, models, endpoints, and extensions, and keep credentials secure.</p>
+        <p><b>3. Data Processing and Privacy</b><br>Chat records, character cards, memories, model configuration, and API Keys are usually stored in the app data on your device. When you actively export, back up, upload files, use third-party network features, or submit requests to an external HTTP service, related data will be copied, transmitted, or disclosed according to your actions. Marketplace, announcements, update checks, GitHub login, and publishing features may access Operit, GitHub, or related third-party resources; these features do not relay chat model requests. Manage your data and credentials together with device security settings, third-party service terms, and this agreement.</p>
+        <p><b>4. External Deployment and Operator Responsibility</b><br>External HTTP services, QQ Bot, auto-reply, and similar capabilities are enabled at your choice. If you make them available to others or to the public, you act as the actual deployer or operator and are responsible for access control, user authorization, content safety, data protection, minor protection, required notices, and other applicable obligations. If you continuously provide emotional interaction services to the public in mainland China that simulate natural-person personality traits, thinking patterns, or communication styles, you should evaluate and comply with the Interim Measures for the Administration of Artificial Intelligence Anthropomorphic Interaction Services (《人工智能拟人化互动服务管理暂行办法》) and other applicable rules. You must not use this app to provide virtual relatives, virtual companions, or other virtual intimate relationship services to minors, induce emotional dependence or addiction, conduct emotional manipulation, or otherwise infringe the lawful rights and interests of others.</p>
+        <p><b>5. Lawful Use and Content Responsibility</b><br>You must comply with applicable laws and regulations, third-party service rules, and platform rules. You must not use this app, extensions, or configuration to conduct unlawful activities, infringe others rights, access systems or data without authorization, or spread unlawful or harmful content. You are responsible for the content and conduct you input, configure, generate, publish, forward, or operate. AI outputs may contain errors, omissions, or bias and do not constitute medical, mental-health crisis, legal, financial, or other professional advice. In urgent dangerous situations, contact local emergency services, medical institutions, or trusted people promptly.</p>
+        <p><b>6. Software Provided As Is</b><br>To the extent permitted by applicable law, this software is provided on an "as is" and "as available" basis. Contributors make no express or implied warranties regarding the continued availability, accuracy, safety, merchantability, fitness for a particular purpose, or non-infringement of the software or third-party services. Losses caused by use of this software, third-party services, extensions, user configuration, or self-made modifications should be handled under applicable law and the relevant service agreements.</p>
+        <p><b>7. Agreement Updates and Contact</b><br>We may update this agreement due to feature, legal, or security requirements, and provide the current version in the app. Updates that materially affect user rights will take effect by increasing the agreement version and requiring confirmation again. You may raise questions and feedback through the project repository, in-app feedback entry, or public contact channels.</p>
     ]]></string>
-    <string name="agreement_disclaimer">If there is any inconsistency or conflict between the "Plain Language Version" and the "Formal Legal Agreement", the "Formal Legal Agreement" in Chinese shall prevail. We reserve the final right of interpretation.</string>
+    <string name="agreement_disclaimer">The plain language version is only for easier understanding. If it differs from the Chinese formal version, the Chinese formal version prevails.</string>
     <string name="agreement_accept">I have read and agree</string>
     <string name="agreement_wait">Please wait... (%1$d)</string>
+    <string name="market_agreement_title">Plugin Market Agreement and Community Rules</string>
+    <string name="market_agreement_subtitle">Please read and agree to this agreement before entering the plugin market. The market is for sharing and discovering plugins; authors are encouraged to open source through a public GitHub repository.</string>
+    <string name="market_agreement_version">Market agreement version: %1$s</string>
+    <string name="market_agreement_content">1. Market role. The Operit plugin market is only for sharing, discovering, and indexing scripts, packages, Skills, MCP servers, and other extensions, and for providing in-market browsing, downloading, and installation entry points. The market is not the plugin author, buyer, seller, broker, payment provider, guarantor, or rights registry. Listing, displaying, ranking, or recommending a plugin does not mean that Operit developed, owns, represents, or endorses it.\n\n2. Publication license. By submitting a plugin to the market, the publisher grants Operit a non-exclusive, non-transferable license limited to what is necessary to operate the market: to store, cache, reproduce, process, display, and index the market entry, and to provide the plugin to market users for downloading and installation. Publication also means that the publisher allows market users to download, install, and use the plugin for its intended purpose, but does not by itself permit modification or redistribution. This license does not transfer copyright, ownership, or other rights in the plugin, and does not give the market a general right to sublicense the plugin outside the market. The publisher must have the right to grant this license.\n\n3. GitHub open-source recommendation. We recommend that publishers publish source code directly in a public GitHub repository they control, together with a README, license, versions or Releases, and changelogs, and register that source with the market. A publicly visible GitHub repository does not automatically grant an open-source license. Permission to use, modify, or redistribute must come from the author\'s stated open-source license or another written authorization.\n\n4. User use and redistribution. The right to redistribute a plugin remains with its author or other rights holder unless the applicable license or another authorization permits it. The preceding permission to download, install, and use does not grant every user the right to upload, forward, repackage, sell, or republish the plugin. Unless the law provides otherwise, users may modify and redistribute a plugin only under the license or authorization stated by the author. A plugin without permission to redistribute may not be redistributed by users. The rights for an open-source plugin are determined by its open-source license.\n\n5. Third-party risks and security responsibility. Plugins have independent code, configuration, and runtime permissions. They may execute code, start local services, access files, read environment variables, or connect to the network. Users must review and bear the risks of enabling, installing, and using plugins. Publishers must not commit API keys, cookies, tokens, private keys, passwords, or user data to plugins, repositories, examples, or configuration, and must accurately disclose the author, license, permissions, network behavior, environment variables, external services, and known risks. Operit does not guarantee the security, accuracy, availability, legality, or compatibility of third-party extensions.\n\n6. Comments and community conduct. Comments must relate to plugin features, usage, defects, or security issues. Do not post QQ, Telegram, Discord, or other group numbers, contact details, advertisements, traffic diversion, transaction information, unrelated links, or other disruptive content. Do not disclose API keys, cookies, tokens, private keys, passwords, or personal data.\n\n7. No trading or diversion. Do not buy, sell, resell, or provide paid installation of plugins in the market. Do not use payments, tips, memberships, private messages, or third-party links to charge others for free plugins. The market does not provide payment, fulfillment, refunds, or transaction dispute services. Free plugins require no payment to anyone; charges, licenses, or promises from third-party channels are not endorsed by Operit.\n\n8. Market service boundary. To provide sharing, downloading, and installation, the market may store, cache, or transmit market entries and plugin files, but it does not promise permanent hosting, backup, confidentiality, or anti-copying. Publishing to the market means that the author authorizes the market to provide downloading and installation to market users under this agreement; it does not automatically give the public a right to redistribute the plugin. Availability and continued access may depend on the author\'s repository, GitHub, and other third-party services.\n\n9. Enforcement and updates. Comments, entries, or accounts that violate these rules may be restricted, hidden, or removed. When this market agreement changes materially due to product, legal, or security requirements, its version will be increased. Users must read and confirm the updated agreement when they next enter the market.</string>
     
     <!-- File Manager -->
     <string name="files_selected">%1$d files selected</string>
@@ -1822,6 +1862,13 @@
     <string name="external_http_chat_save_token">Save</string>
     <string name="external_http_chat_token_saved">Token saved</string>
     <string name="external_http_chat_token_length_error">Token must be at least 6 characters</string>
+    <string name="external_http_chat_a2a_title">A2A Agent Interface</string>
+    <string name="external_http_chat_a2a_desc">Uses the same listening port and Bearer token to provide A2A 1.0 JSON-RPC. Give an A2A client the Agent Card URL for discovery first.</string>
+    <string name="external_http_chat_a2a_agent_card">Agent Card URL</string>
+    <string name="external_http_chat_a2a_json_rpc">JSON-RPC URL</string>
+    <string name="external_http_chat_a2a_copy_agent_card">Copy Agent Card</string>
+    <string name="external_http_chat_a2a_copy_json_rpc">Copy JSON-RPC</string>
+    <string name="external_http_chat_a2a_url_copied">A2A URL copied</string>
     <string name="operation_details">Operation Details</string>
     <string name="path">Path</string>
     <string name="from_node">From node: %1$s</string>
@@ -2542,8 +2589,18 @@
     <!-- Speech Services Settings -->
     <string name="speech_services_tts_title">Text-to-Speech (TTS) Settings</string>
     <string name="speech_services_tts_desc">Configure how text is converted to voice output</string>
+    <string name="speech_services_tts_profiles">TTS Profiles</string>
     <string name="speech_services_stt_title">Speech-to-Text (STT) Settings</string>
     <string name="speech_services_stt_desc">Configure how speech is converted to text</string>
+    <string name="speech_services_stt_profiles">STT Profiles</string>
+    <string name="speech_services_profile_current">Current profile</string>
+    <string name="speech_services_profile_create">Create speech profile</string>
+    <string name="speech_services_profile_created">Speech profile created</string>
+    <string name="speech_services_profile_delete">Delete speech profile</string>
+    <string name="speech_services_profile_delete_message">Delete &quot;%1$s&quot;?</string>
+    <string name="speech_services_profile_loading">Loading speech profiles...</string>
+    <string name="speech_services_profile_migrated_tts">Migrated TTS configuration</string>
+    <string name="speech_services_profile_migrated_stt">Migrated STT configuration</string>
     <string name="speech_services_tts_speech_rate_value">Speech rate: %1$.2fx</string>
     <string name="speech_services_tts_pitch_value">Pitch: %1$.2fx</string>
     <string name="speech_services_service_type">Service Type</string>
@@ -3175,7 +3232,7 @@
     <string name="thinking_type_off">off</string>
     <string name="thinking_type_mode">mode</string>
     <string name="thinking_quality">Thinking intensity</string>
-    <string name="thinking_quality_desc">Only effective in thinking mode. GPT-5.6 models use five levels; other models retain the original four levels. Higher values use deeper reasoning.</string>
+    <string name="thinking_quality_desc">Only effective in thinking mode. Available values follow the real mapping of the current model and provider.</string>
     <string name="model_config">Model Configuration</string>
     <string name="model_config_desc">Select a configured model here, or click Manage Configuration below to create or modify models</string>
     <string name="prompt">Prompt</string>
@@ -3183,17 +3240,19 @@
     <string name="memory">Memory</string>
     <string name="memory_desc">Select the isolated memory space used by the current conversation</string>
     <string name="memory_space_select">Select memory space</string>
-    <string name="memory_space_create">Create memory space</string>
-    <string name="memory_space_rename">Rename memory space</string>
-    <string name="memory_space_delete">Delete memory space</string>
-    <string name="memory_space_name">Memory space name</string>
-    <string name="memory_space_delete_warning">Delete “%1$s” and all memories in it? This cannot be undone.</string>
     <string name="memory_auto_update">Auto Save Memory</string>
     <string name="memory_auto_update_desc">When enabled, candidate content from the current conversation is queued after the reply is finalized, then written into the memory library by periodic background processing while the app process remains alive.</string>
     <string name="memory_auto_update_runtime_status">Pending memory extraction items: %1$d, next save in %2$d minute(s)</string>
     <string name="chat_summarizing_memory">Summarizing memory...</string>
     <string name="chat_input_processing_collect_failed">Failed to collect input processing state: %1$s</string>
     <string name="chat_input_hint">Type a message...</string>
+    <string name="chat_pasted_text_attached">Pasted text added as an attachment: %1$s</string>
+    <string name="settings_section_chat_input">Chat Input</string>
+    <string name="long_pasted_text_to_file">Convert long pasted text to a file</string>
+    <string name="long_pasted_text_to_file_desc">Pasted text longer than the configured limit is added as a text attachment</string>
+    <string name="long_pasted_text_threshold">Conversion limit</string>
+    <string name="long_pasted_text_threshold_desc">Pasted text longer than this number of characters is converted to a file</string>
+    <string name="long_pasted_text_threshold_unit">characters</string>
     <string name="chat_pending_queue_title">Pending Queue (%1$d)</string>
     <string name="chat_queue_add_message">Queue Message</string>
     <string name="chat_queue_added">Added to queue</string>
@@ -3412,7 +3471,7 @@
     <string name="chat_ai_computer_closed_due_to_workspace">AI computer closed (workspace opened)</string>
     <string name="ai_planning_desc">Will perform task decomposition and trigger multiple sub-agents to collect information, then summarize. Sub-agents have the same tool-calling capabilities as the chat agent. This can be very time-consuming, only recommended when collecting information.</string>
     <string name="thinking_mode">Thinking Mode</string>
-    <string name="thinking_mode_desc">Currently supports Gemini, Qwen3, Claude, Doubao, NVIDIA, SiliconFlow and MNN local models, enabling built-in thinking.</string>
+    <string name="thinking_mode_desc">Controls built-in model thinking and thinking intensity. Actual behavior depends on the current model and provider; some models may only support the on/off control.</string>
     <string name="model_selection">Model Selection</string>
     <string name="prompt_selection">Prompt Selection</string>
     <string name="memory_selection">Memory Selection</string>
@@ -3452,6 +3511,25 @@
     <string name="batch_assign_description">Batch assign selected chats to a character card or group. You can modify the group without changing the character card, or modify both.</string>
     <string name="batch_assign_title">Batch Assign Chat History</string>
     <string name="batch_assign_subtitle">Select multiple chat records and batch adjust character card binding or grouping</string>
+    <string name="chat_history_batch_operations_title">Batch Chat Operations</string>
+    <string name="chat_history_batch_operations_subtitle">Select chats to manage them or build their memory library</string>
+    <string name="chat_history_batch_management">Batch management</string>
+    <string name="chat_history_selected_actions">Actions for selected chats (%1$d)</string>
+    <string name="chat_history_selected_actions_title">Selected chat actions</string>
+    <string name="chat_memory_rebuild_title">Build Memory Library in Windows</string>
+    <string name="chat_memory_rebuild_subtitle">Extract memories from bounded windows of original user and assistant messages</string>
+    <string name="chat_memory_rebuild_window_size">Messages per window</string>
+    <string name="chat_memory_rebuild_window_size_value">%1$d messages</string>
+    <string name="chat_memory_rebuild_start">Build memory for %1$d selected chats</string>
+    <string name="chat_memory_rebuild_preparing">Reading chat records and planning windows...</string>
+    <string name="chat_memory_rebuild_progress">%1$s · Window %2$d/%3$d · Messages %4$d/%5$d · Failed %6$d</string>
+    <string name="chat_memory_rebuild_completed">Build complete: %1$d chats, %2$d windows, %3$d failed</string>
+    <string name="chat_memory_rebuild_cancel">Cancel build</string>
+    <string name="chat_memory_rebuild_cancelled">Build cancelled, %1$d/%2$d windows completed</string>
+    <string name="chat_memory_rebuild_failed">Build failed: %1$s</string>
+    <string name="chat_memory_rebuild_confirm_title">Confirm memory build</string>
+    <string name="chat_memory_rebuild_confirm_message">The %1$d selected chats will be sent to the memory model in order, with %2$d messages per window. The process makes model requests and writes to the corresponding memory space.</string>
+    <string name="chat_memory_rebuild_confirm_action">Start build</string>
     <string name="long_press_to_manage">Long press to manage</string>
     <string name="edit_title_desc">Edit title</string>
     <string name="reorder">Reorder</string>
@@ -3460,7 +3538,7 @@
     <string name="long_press_manage">Long press to manage</string>
     
     <!-- Settings Screen Subtitles -->
-    <string name="settings_user_preferences_subtitle">Edit and preview user.md</string>
+    <string name="settings_user_preferences_subtitle">Manage user profiles and associated memory spaces</string>
     <string name="settings_language_subtitle">Interface language switching</string>
     <string name="settings_theme_subtitle">Theme and appearance customization</string>
     <string name="layout_adjustment">Layout Adjustment</string>
@@ -3550,7 +3628,7 @@
     <string name="settings_per_request_cost">¥%1$.4f per request</string>
     <string name="settings_per_request_cost_with_currency">%1$s%2$.4f per request</string>
     <string name="settings_switch_billing_mode">Switch Billing Mode</string>
-    <string name="settings_model_details">Model Details</string>
+    <string name="settings_model_details">Configuration Details</string>
     <string name="settings_click_to_edit_pricing">Click to edit pricing</string>
     <string name="settings_edit_model_pricing">Edit Model Pricing - %1$s</string>
     <string name="settings_pricing_description">Set RMB price per million tokens</string>
@@ -3558,7 +3636,6 @@
     <string name="settings_pricing_description_with_currency">Set price per million tokens (%1$s)</string>
     <string name="settings_token_price_description_with_currency">Set price per API request (%1$s)</string>
     <string name="settings_exchange_rate_title">Exchange Rate</string>
-    <string name="settings_exchange_rate_subtitle">USD-priced models are converted to CNY total cost using this rate</string>
     <string name="settings_usd_to_cny_rate_label">USD → CNY Rate</string>
     <string name="settings_rate_applied_hint">Total cost converted with 1 USD = %1$.4f CNY</string>
     <string name="settings_input_price_per_million">Input Price (per million tokens)</string>
@@ -3571,6 +3648,7 @@
     <string name="settings_reset_model_counts">Reset This Model</string>
     <string name="settings_reset_model_confirmation">Reset Model Confirmation</string>
     <string name="settings_reset_model_warning">This will clear token and request count statistics for %1$s. This action cannot be undone.</string>
+    <string name="settings_token_stats_reset_failed">Failed to reset statistics. Please try again.</string>
     <string name="settings_reset">Reset</string>
     <string name="settings_edit_pricing">Edit Pricing</string>
     <string name="settings_input_tokens">Input Tokens</string>
@@ -3578,6 +3656,76 @@
     <string name="settings_cached_tokens_label">Cached Tokens</string>
     <string name="settings_price_format">$%.2f/1M</string>
     <string name="settings_cost">Cost</string>
+    <string name="token_stats_lifetime_total">Cumulative Usage</string>
+    <string name="token_stats_lifetime_models">Cumulative Models</string>
+    <string name="token_stats_lifetime_model_value">%1$s tokens · %2$d%%</string>
+    <string name="token_stats_tokens_total">Total Tokens</string>
+    <string name="token_stats_rate_default_hint">Default estimate: 1 USD = %1$s CNY (not set manually)</string>
+    <string name="token_stats_rate_applied_hint">Converted at 1 USD = %1$s CNY</string>
+    <string name="token_stats_rate_invalid">Rate must be a positive finite number</string>
+    <string name="token_stats_rate_summary">1 USD = %1$s CNY</string>
+    <string name="token_stats_rate_input_prefix">1 USD =</string>
+    <string name="token_stats_rate_estimated">Default estimate</string>
+    <string name="token_stats_rate_manual">Manual rate</string>
+    <string name="token_stats_rate_edit">Edit exchange rate</string>
+    <string name="token_stats_unknown_cost">%1$d request(s) with unknown cost</string>
+    <string name="token_stats_unknown_parts">%1$d request(s) with partially unknown data</string>
+    <string name="token_stats_request_count_compact">%1$s requests</string>
+    <string name="token_stats_unknown_part_suffix">unknown %1$d</string>
+    <string name="token_stats_token_uncached">Uncached input</string>
+    <string name="token_stats_token_cached">Cache read</string>
+    <string name="token_stats_cache_rate">Cache rate</string>
+    <string name="token_stats_token_output">Output</string>
+    <string name="token_stats_date_range">Date range</string>
+    <string name="token_stats_range_analysis">Range analysis</string>
+    <string name="token_stats_period_overview">Period overview</string>
+    <string name="token_stats_composition">Token composition</string>
+    <string name="token_stats_model_show_all">Show all (%1$d)</string>
+    <string name="token_stats_model_collapse">Collapse</string>
+    <string name="token_stats_filters">Filters</string>
+    <string name="token_stats_trends">Trend analysis</string>
+    <string name="token_stats_settings">Statistics settings</string>
+    <string name="token_stats_custom_range_confirm">OK</string>
+    <string name="token_stats_custom_range_invalid">End date must be after start date</string>
+    <string name="token_stats_custom_range_too_long">Custom range must not exceed 3 years</string>
+    <string name="token_stats_filter_all_models">All models</string>
+    <string name="token_stats_filter_models_count">%1$d models</string>
+    <string name="token_stats_filter_model_label">Model: %1$s</string>
+    <string name="token_stats_currency">Total currency</string>
+    <string name="token_stats_currency_cny">CNY</string>
+    <string name="token_stats_currency_usd">USD</string>
+    <string name="token_stats_chart_cost">Cost Trend</string>
+    <string name="token_stats_chart_requests">Request Trend</string>
+    <string name="token_stats_chart_tokens">Token Trend</string>
+    <string name="token_stats_metric_cost">Cost</string>
+    <string name="token_stats_metric_requests">Requests</string>
+    <string name="token_stats_metric_tokens">Token</string>
+    <string name="token_stats_no_data_in_range">No data in this range</string>
+    <string name="token_stats_empty">No statistics yet</string>
+    <string name="token_stats_empty_hint">Model call statistics will appear here</string>
+    <string name="token_stats_load_failed">Failed to load statistics. Please retry.</string>
+    <string name="token_stats_retry">Retry</string>
+    <string name="token_stats_model_count">%1$d models</string>
+    <string name="token_stats_configuration_count">%1$d configurations</string>
+    <string name="token_stats_model_expand">Expand or collapse details</string>
+    <string name="token_stats_pricing_configuration">Configuration price</string>
+    <string name="token_stats_pricing_model">Model price</string>
+    <string name="token_stats_price_label">Price</string>
+    <string name="token_stats_unknown_pricing">Pricing unknown</string>
+    <string name="token_stats_config_deleted">Deleted configuration</string>
+    <string name="token_stats_pricing_edit">Edit override</string>
+    <string name="token_stats_pricing_delete">Delete</string>
+    <string name="token_stats_pricing_input">Input price (per million)</string>
+    <string name="token_stats_pricing_cached">Cache read price (per million)</string>
+    <string name="token_stats_pricing_cache_write">Cache write price (per million)</string>
+    <string name="token_stats_pricing_output">Output price (per million)</string>
+    <string name="token_stats_pricing_per_request">Price per request</string>
+    <string name="token_stats_pricing_save_failed">Failed to save price override</string>
+    <string name="token_stats_pricing_delete_failed">Failed to delete price override</string>
+    <string name="token_stats_chart_prev_bucket">Previous time bucket</string>
+    <string name="token_stats_chart_next_bucket">Next time bucket</string>
+    <string name="token_stats_chart_bucket_of">Bucket %1$d of %2$d</string>
+    <string name="token_stats_chart_summary">%1$s, %2$s, %3$s, total %4$s</string>
     
     <!-- User Preferences Guide Screen -->
     <string name="user_male">Male</string>
@@ -3865,6 +4013,10 @@
     <string name="enable_direct_video_processing_desc">When enabled, video will be sent directly to the AI for processing instead of tool-based frame extraction/analysis</string>
     <string name="enable_google_search">Enable Google Search</string>
     <string name="enable_google_search_desc">When enabled, Gemini will use Google Search to enhance responses (may incur additional charges)</string>
+    <string name="enable_deepseek_web_search">Enable DeepSeek web search</string>
+    <string name="enable_deepseek_web_search_desc">When using a DeepSeek Responses endpoint, allow the model to use server-side web search.</string>
+    <string name="enable_codex_web_search">Enable Codex web search</string>
+    <string name="enable_codex_web_search_desc">When signed in to Codex, allow the model to use server-side web search.</string>
     <string name="enable_claude_1h_prompt_cache">Enable Claude 1-hour prompt cache</string>
     <string name="enable_claude_1h_prompt_cache_desc">When enabled, Claude and Claude-compatible providers use a 1-hour prompt cache TTL</string>
     <string name="enable_tool_call">Model supports ToolCall</string>
@@ -3872,6 +4024,10 @@
     <string name="enable_deepseek_reasoning">Enable DeepSeek Reasoning Mode</string>
     <string name="enable_deepseek_reasoning_desc">When enabled, content within &lt;think&gt; tags will be sent as reasoning_content to DeepSeek models, supporting tool invocation for reasoning models like DeepSeek-R1</string>
     <string name="search_sources">Search Sources</string>
+    <string name="search_query_label">Query</string>
+    <string name="search_action_label">Action</string>
+    <string name="search_status_label">Status</string>
+    <string name="search_source_count">%1$d sources</string>
     <string name="api_settings_saved">API settings saved</string>
     <string name="save_api_settings">Save API Settings</string>
     <string name="available_models_list">Available Models List</string>
@@ -3887,6 +4043,7 @@
     <string name="auto_save_failed">Auto save failed</string>
     <!-- API Provider names -->
     <string name="provider_openai">OpenAI (GPT Series)</string>
+    <string name="provider_xai">SpaceXAI (Grok)</string>
     <string name="provider_openai_responses">OpenAI (Responses API)</string>
     <string name="provider_openai_responses_generic">OpenAI Responses (Generic)</string>
     <string name="provider_anthropic">Anthropic (Claude Series)</string>
@@ -3905,6 +4062,7 @@
     <string name="provider_siliconflow">SiliconFlow</string>
     <string name="provider_iflow">iFlow</string>
     <string name="provider_openrouter">OpenRouter (Multi-model Hub)</string>
+    <string name="provider_opencode">OpenCode</string>
     <string name="provider_4router">4Router</string>
     <string name="provider_nous_portal">Nous Portal</string>
     <string name="provider_infiniai">InfiniAI</string>
@@ -3914,6 +4072,7 @@
     <string name="provider_openai_local">OpenAI-Compatible (Local Model)</string>
     <string name="provider_ppinfra">PPInfra Cloud</string>
     <string name="provider_novita">Novita AI</string>
+    <string name="provider_minimax">MiniMax</string>
     <string name="provider_openai_generic">OpenAI (Generic)</string>
     <string name="provider_other">Other Providers</string>
     <string name="provider_doubao">Doubao</string>
@@ -4041,7 +4200,7 @@
     <string name="screen_title_memory_base">Memory Base</string>
     <string name="screen_title_tool_permissions">Tool Permissions</string>
     <string name="screen_title_user_preferences_guide">User Preferences Guide</string>
-    <string name="screen_title_user_preferences_settings">User Profile (user.md)</string>
+    <string name="screen_title_user_preferences_settings">User Profile Settings</string>
     <string name="screen_title_model_config">Model &amp; Parameters Configuration</string>
     <string name="screen_title_speech_services_settings">Speech Services Settings</string>
     <string name="screen_title_persona_card_generation">Persona Card Generation</string>
@@ -4308,6 +4467,7 @@
 
     <!-- Model Configuration -->
     <string name="overseas_provider_warning">Detected that you are in mainland China but selected an overseas service provider. Please confirm whether you have enabled proxy tools</string>
+    <string name="international_proxy_provider_warning">This service routes requests through an international third-party proxy. Access from mainland China requires a proxy tool. Request data will be relayed by a third party; review your network environment, terms of service, and data compliance requirements.</string>
 
         <!-- Token Config WebView & URL Config Dialog -->
     <string name="custom_url_config">Custom URL Configuration</string>
@@ -4354,6 +4514,10 @@
 
     <string name="github_account">GitHub Account</string>
     <string name="login_github">Login to GitHub</string>
+    <string name="github_login_method_description">Choose how to sign in to GitHub. Embedded page completes authorization in the app; external browser opens your system browser and returns after authorization.</string>
+    <string name="github_login_method_embedded">Login with Embedded Page</string>
+    <string name="github_login_method_external">Login with External Browser</string>
+    <string name="github_login_starting">Preparing GitHub authorization…</string>
     <string name="publish_mcp_plugins_to_market">• Publish your MCP plugins to the market</string>
     <string name="manage_published_plugins">• Manage your published plugins</string>
     <string name="better_installation_experience">• Get better installation experience</string>
@@ -4916,10 +5080,6 @@
     <string name="font_file_saved">Font file saved (.%1$s)</string>
     <string name="font_file_save_failed">Failed to save font file</string>
     <string name="unsupported_font_format">Unsupported file format, please select .ttf, .otf or .ttc font file</string>
-    <string name="current_character">Current Character: %1$s</string>
-    <string name="current_character_group">Current Role Group: %1$s</string>
-    <string name="theme_auto_bind_character_card">Theme settings will be automatically bound to this character card</string>
-    <string name="theme_auto_bind_character_group">Theme settings will be automatically bound to this role group</string>
     <string name="enable_custom_font">Enable Custom Font</string>
     <string name="use_system_or_custom_font">Use system font or custom font file</string>
     <string name="font_type_label">Font Type</string>
@@ -5103,6 +5263,9 @@
     <string name="mood_tag_block">Mood Tag</string>
     <string name="thinking_tools_group_title_with_count">Thinking &amp; Tool Calls (%1$d)</string>
     <string name="tools_group_title_with_count">Tool Calls (%1$d)</string>
+    <string name="search_group_title">Search</string>
+    <string name="thinking_search_group_title">Thinking and searching</string>
+    <string name="thinking_search_tools_group_title_with_count">Thinking, searching, and calling tools (%1$d)</string>
     
     <!-- Backup Settings Screen -->
     <string name="backup_data_overview">Data Overview</string>
@@ -5177,12 +5340,10 @@
     <string name="backup_raw_snapshot_restore_confirm_message">This will overwrite current app data with the following backup:\n%1$s\n\nThis action cannot be undone. It is recommended to perform a backup before restoring.</string>
     <string name="backup_raw_snapshot_restore_confirm_action">Confirm restore</string>
     <string name="backup_raw_snapshot_restore_cancel_action">Cancel</string>
-    <string name="backup_raw_snapshot_restart_title">App restart required</string>
-    <string name="backup_raw_snapshot_restart_message">File snapshot restored. To avoid issues caused by old caches/connections, please restart the app now.</string>
-    <string name="backup_raw_snapshot_restart_now">Restart now</string>
-    <string name="backup_raw_snapshot_restart_later">Later</string>
-
     <string name="backup_chat_history">Chat History</string>
+    <string name="backup_select_chat_records">Select chat records</string>
+    <string name="backup_select_chat_records_hint">Choose the chat records to export.</string>
+    <string name="backup_clear_selection">Clear selection</string>
     <string name="backup_chat_history_subtitle">Cross-format backup, export and recovery</string>
     <string name="backup_chat_current_count">Currently %1$d chat record(s).</string>
     
@@ -5199,6 +5360,7 @@
     <string name="backup_model_config_current_count">Currently %1$d model configuration(s).</string>
     
     <string name="backup_exporting">Exporting %1$s...</string>
+    <string name="backup_text_export_progress">Exporting long text: %1$d%% (%2$d / %3$d characters processed)</string>
     <string name="backup_importing">Importing %1$s...</string>
     <string name="backup_deleting">Clearing chat history...</string>
     <string name="backup_export_success">Export Successful</string>
@@ -5480,6 +5642,7 @@
     <string name="toolreg_update_chat_title_desc">Update chat title: %1$s</string>
     <string name="toolreg_delete_chat_desc">Delete chat: %1$s</string>
     <string name="toolreg_send_message_to_ai_desc">Send message to AI: %1$s</string>
+    <string name="toolreg_call_chat_model_desc">Call function model: %1$s</string>
     <string name="toolreg_list_character_cards_desc">List all character cards</string>
     <string name="toolreg_get_chat_messages_desc">Get chat messages: %1$s%2$s%3$s</string>
     <string name="toolreg_list_files_desc">List directory: %1$s%2$s</string>
@@ -5723,6 +5886,8 @@
     <string name="memory_auto_save_interval_minutes">Autosave interval (minutes)</string>
     <string name="memory_auto_save_interval_value">%1$d min · range %2$d-%3$d</string>
     <string name="memory_auto_save_interval_hint">Adjustable range %1$d-%2$d minutes, default %3$d minutes</string>
+    <string name="memory_extraction_custom_rules">Memory Extraction Rules</string>
+    <string name="memory_extraction_custom_rules_placeholder">For example: Store project decisions and user preferences only; organize by project.</string>
     <string name="memory_search_mode_balanced">Balanced</string>
     <string name="memory_search_mode_keyword_first">Keyword First</string>
     <string name="memory_search_mode_semantic_first">Semantic First</string>
@@ -6141,6 +6306,13 @@
 
     <!-- Workflow -->
     <string name="workflow_load_failed">Failed to load workflow</string>
+    <string name="workflow_storage_dir_unavailable">Unable to create workflow directory: %1$s</string>
+    <string name="workflow_storage_dir_unreadable">Unable to read workflow directory: %1$s</string>
+    <string name="workflow_storage_path_not_directory">Workflow storage path is not a directory: %1$s</string>
+    <string name="workflow_storage_file_parent_missing">Workflow file has no parent directory: %1$s</string>
+    <string name="workflow_storage_file_root_invalid">Workflow file format is invalid: %1$s is not a JSON object</string>
+    <string name="workflow_storage_invalid_files">Found %1$d invalid workflow file(s), skipped: %2$s</string>
+    <string name="workflow_storage_single_file_invalid">Workflow file format is invalid and cannot be opened: %1$s</string>
     <string name="workflow_create_failed">Failed to create workflow</string>
     <string name="workflow_update_condition_failed">Failed to update connection condition</string>
     <string name="workflow_update_failed">Failed to update workflow</string>
@@ -6395,7 +6567,7 @@
     <string name="webvisit_url_label">Visiting URL:</string>
     <string name="webvisit_status_loading_page">Loading page...</string>
     <string name="webvisit_status_waiting_page">Waiting for page to fully load...</string>
-    <string name="webvisit_status_captcha">Please complete CAPTCHA verification within %1$d seconds...</string>
+    <string name="webvisit_load_timeout">Web page load timed out; the visit was ended.</string>
     <string name="webvisit_status_extracting">Extracting content, will auto-continue in %1$d seconds...</string>
     <string name="webvisit_status_extracted_waiting">Content extracted, waiting for manual continue...</string>
     <string name="webvisit_status_waiting_extraction">Page loaded, waiting for content extraction...</string>
@@ -6494,6 +6666,9 @@
     <string name="workflow_unknown_error">Unknown error</string>
     <string name="workflow_in_list_type_mismatch">IN list type mismatch: contains numbers and non-numbers right=\'%1$s\'</string>
     <string name="workflow_log_start_execution">Starting workflow execution: %1$s (%2$s)</string>
+    <string name="workflow_log_runtime_initialization_failed">Workflow runtime initialization failed: %1$s</string>
+    <string name="workflow_log_startup_failed">Workflow startup failed: %1$s</string>
+    <string name="workflow_log_execution_cancelled_reason">Workflow execution cancelled: %1$s</string>
     <string name="workflow_log_no_trigger_node">Workflow has no trigger node</string>
     <string name="workflow_log_trigger_node_not_exist">Specified trigger node does not exist: %1$s</string>
     <string name="workflow_log_scheduled_trigger">Scheduled trigger: executing specified trigger node %1$s</string>
@@ -6584,6 +6759,11 @@
     <string name="visit_web_wait_time_title">Visit Web Wait Time</string>
     <string name="visit_web_wait_time_description">Controls how long visit_web waits before returning after page content is extracted. Set to 0 seconds to return immediately.</string>
     <string name="visit_web_wait_time_value">%1$d s</string>
+    <string name="toolpkg_hook_timeout_title">ToolPkg Hook Timeout</string>
+    <string name="toolpkg_hook_timeout_description">Limits the total wait time for ToolPkg chat-input, prompt, and summary hook chains on the send path. On timeout, the current hook is skipped and processing continues. Default: 10 seconds. Does not affect message-processing response takeover.</string>
+    <string name="toolpkg_hook_timeout_value">%1$d s</string>
+    <string name="toolpkg_hook_timeout_continue_sending">A pre-send plugin timed out. It was skipped and the message will continue sending.</string>
+    <string name="toolpkg_hook_timeout_continue_sending_with_plugin">Pre-send plugin "%1$s" timed out. It was skipped and the message will continue sending.</string>
     <string name="tool_collapse_mode_title">Collapse Tools</string>
     <string name="tool_collapse_mode_desc">Set the default collapse scope for tool-call groups in messages</string>
     <string name="tool_collapse_mode_read_only">Collapse Multiple Read-only Tools</string>
@@ -6721,6 +6901,7 @@
     <string name="mnn_error_with_message">Error: %1$s</string>
     <string name="mnn_session_not_initialized">Error: LLM session not initialized</string>
     <string name="mnn_reasoning_error">\n\n[Reasoning process error]</string>
+    <string name="mnn_error_request_cancelled">Request cancelled by user</string>
     <string name="mnn_generic_error">Error: %1$s</string>
     <string name="mnn_model_not_configured">Model name not configured</string>
     <string name="mnn_model_dir_missing">Model directory does not exist: %1$s\nPlease download the model first</string>
@@ -6991,6 +7172,7 @@
     <string name="llama_error_chat_template_failed">Error: Cannot apply model chat template (llama_model_chat_template/llama_chat_apply_template)</string>
     <string name="llama_error_inference_failed">llama.cpp inference process error</string>
     <string name="llama_error_inference_tag">[Inference error occurred]</string>
+    <string name="llama_error_request_cancelled">Request cancelled by user</string>
 
     <!-- TaskExecutor -->
     <string name="task_error_execution_failed">Task execution failed: %1$s</string>
@@ -7509,6 +7691,7 @@
     <string name="market_sort_updated">Recently updated</string>
     <string name="market_sort_downloads">Downloads</string>
     <string name="market_sort_likes">Likes</string>
+    <string name="market_comment_sort_newest">Newest</string>
     <string name="market_sort_featured">Featured</string>
     <string name="market_filter_featured_only">Featured</string>
     <string name="market_stat_downloads_short">Download %1$d</string>
@@ -7618,6 +7801,7 @@
     <string name="market_section_manage">Manage</string>
     <string name="market_section_publish">Publish</string>
     <string name="market_notifications_title">Messages</string>
+    <string name="market_agreement_entry">Market Agreement</string>
     <string name="market_notifications_empty_title">No messages yet</string>
     <string name="market_notifications_empty_description">Market messages will appear here.</string>
     <string name="market_manage_removed">Submitted removal request for "%1$s"</string>
@@ -7639,6 +7823,9 @@
     <string name="market_publish_new_version_detail_desc">This plugin allows community updates. You can submit a new version, and it will become public after review.</string>
     <string name="market_allow_public_updates_title">Allow anyone to update this plugin</string>
     <string name="market_allow_public_updates_desc">When enabled, other signed-in users can submit new versions for this plugin. Only the original publisher can change this switch.</string>
+    <string name="artifact_publish_encrypt_title">Encrypt published asset</string>
+    <string name="artifact_publish_encrypt_desc">When enabled, scripts are AST-minified and package resources upload in Operit protected format. Install and cache stay encrypted, and runtime reads decrypt automatically.</string>
+    <string name="artifact_publish_encrypt_confirmation">Encrypted publish: %1$s</string>
     <string name="market_login_required_hint">Log in to GitHub to manage and publish market content</string>
     <string name="available_scripts_market">Available Scripts</string>
     <string name="available_packages_market">Available Packages</string>
@@ -7690,6 +7877,10 @@
     <string name="chat_delete_single_variant_unavailable">No single message candidates available for deletion</string>
     <string name="chat_delete_single_variant_failed">Failed to delete single message: %1$s</string>
     <string name="chat_delete_message_confirm_message">Are you sure you want to delete this message? This action cannot be undone.</string>
+    <plurals name="chat_delete_selected_messages_confirm">
+        <item quantity="one">Delete %1$d selected message? This cannot be undone.</item>
+        <item quantity="other">Delete %1$d selected messages? This cannot be undone.</item>
+    </plurals>
 
     <string name="quick_plugin_creator_title">Quickly Create Your Plugin</string>
     <string name="quick_plugin_creator_desc">Cannot find the plugin you want in the built-in list or marketplace? Create your own.</string>
@@ -7730,11 +7921,7 @@
     <string name="speech_services_vits_options_placeholder">{\"sample_rate\":\"22050\",\"noise_scale\":\"0.667\",\"length_scale\":\"1.0\",\"noise_w\":\"0.8\",\"frontend\":\"lexicon\"}</string>
     <string name="speech_services_vits_options_hint">Optional: sample_rate, threads, noise_scale, length_scale, noise_w, frontend, text_mode, speaker_count, input names, blank/bos/eos tokens, model_path, config_path, lexicon_path, etc.</string>
     <string name="speech_services_vits_options_error">Invalid VITS/Piper Parameters JSON</string>
-    <string name="github_login_method_description">Please select a GitHub login method. Embedded mode is suitable for devices that cannot launch an external browser; external browser mode offers better compatibility.</string>
-    <string name="github_login_method_embedded">Login with Embedded Page</string>
-    <string name="github_login_method_external">Login with External Browser</string>
     <string name="github_login_external_waiting">Browser opened. Please return to the app after completing authorization.</string>
-    <string name="github_login_external_cancelled">GitHub authorization cancelled</string>
     <string name="chat_message_locator_favorites_filter">Favorites Only</string>
     <string name="attachment_package">Package</string>
     <string name="attachment_package_select_title">Select Package</string>
@@ -7891,6 +8078,8 @@
     <string name="artifact_publish_published_name_readonly">The name of a published artifact cannot be modified</string>
     <string name="artifact_publish_locked_name_must_match_source">When publishing based on a version, the plugin name must match the source version</string>
     <string name="artifact_publish_published_version_readonly">The version number of a published node cannot be modified</string>
+    <string name="artifact_publish_toolpkg_version_readonly">ToolPkg publish version comes from the package manifest and cannot be edited before publishing</string>
+    <string name="artifact_publish_toolpkg_api_version_readonly">ToolPkg API version comes from the package manifest and cannot be edited before publishing</string>
     <string name="artifact_publish_save_artifact_info">Save artifact info</string>
     <string name="artifact_publish_publish_update_version">Publish update version</string>
     <string name="artifact_publish_confirm_save_artifact_info">Confirm save artifact info</string>
@@ -7941,10 +8130,205 @@
     <string name="ai_message_image_attached_multimodal_notice">Image content has been attached as multimodal input with this message. Do not call file reading tools to read this path.</string>
     <string name="ai_message_result_prefix">[Result: </string>
     <string name="ai_message_result_suffix">]</string>
-    <string name="ai_message_package_warmup_title">【Package Warmup】</string>
-    <string name="ai_message_package_warmup_empty">No package tool calls were detected within the scope of this summary, so no package warmup was performed.</string>
-    <string name="ai_message_package_warmup_intro">Based on the frequency of tool usage within the scope of this summary, the most frequently used packages have been automatically activated, and the results of use_package are attached for the next warmup round.</string>
+    <string name="ai_message_package_warmup_title">【Activated Packages】</string>
+    <string name="ai_message_package_warmup_empty">No activated packages were detected in this summary window.</string>
+    <string name="ai_message_package_warmup_intro">The following activated packages can be used directly.</string>
     <string name="ai_message_use_package_failed">use_package call failed: %1$s</string>
     <string name="ai_message_use_package_empty">use_package returned empty.</string>
     <string name="ai_message_package_warmup_item">%1$d. Package %2$s (hit %3$d times)</string>
+    <string name="artifact_publish_encrypt_market_toolpkg_title">Minify and Obfuscate for Publishing</string>
+
+    <string name="market_manage_resubmit">Resubmit</string>
+    <string name="market_manage_resubmitting_title">Resubmitting</string>
+    <string name="market_manage_resubmitting_message">Submitting review request, please wait…</string>
+    <string name="market_manage_resubmit_rejected_blocked">This entry has been rejected and the client does not allow resubmission.</string>
+    <string name="market_manage_resubmit_state_blocked">Only returned entries can be resubmitted.</string>
+    <string name="market_manage_resubmit_confirm_title">Confirm resubmission?</string>
+    <string name="market_manage_resubmit_confirm_message">Will resubmit "%1$s" to the review queue.</string>
+    <string name="market_manage_resubmit_last_state">Last review: %1$s</string>
+    <string name="market_manage_resubmit_last_reason">Return reason: %1$s</string>
+    <string name="market_manage_review_detail">Review detail: %1$s</string>
+    <string name="market_manage_review_dialog_title">Review Status</string>
+    <string name="market_manage_resubmit_confirm_action">Confirm Submission</string>
+    <string name="artifact_publish_encrypt_market_toolpkg_desc">When enabled, executable scripts in ToolPkg will undergo JS syntax tree compression. The compressed package remains a normal ZIP and can be imported directly.</string>
+    <string name="artifact_publish_encrypt_market_toolpkg_confirmation">Compress and obfuscate release: %1$s</string>
+    <string name="artifact_publish_asset_source_title">Release Asset Source</string>
+    <string name="artifact_publish_asset_source_upload">Upload current local package</string>
+    <string name="artifact_publish_asset_source_github_release">Reference GitHub Release asset</string>
+    <string name="artifact_publish_asset_source_confirmation">Release asset source: %1$s</string>
+    <string name="artifact_publish_logo_title">Package Logo</string>
+    <string name="artifact_publish_logo_description">Choose an image for the package. Direct upload writes it into the published package; GitHub Release mode updates the market logo only.</string>
+    <string name="artifact_publish_logo_choose">Choose Logo</string>
+    <string name="artifact_publish_logo_use_package">Use Package Logo</string>
+    <string name="artifact_publish_logo_selected">Selected: %1$s</string>
+    <string name="artifact_publish_logo_from_package">Package logo: %1$s</string>
+    <string name="artifact_publish_logo_confirmation">Logo: %1$s</string>
+    <string name="artifact_publish_logo_preview">Logo preview</string>
+    <string name="artifact_publish_logo_invalid">Could not read the logo. Choose a valid SVG, PNG, JPEG, or WebP file.</string>
+    <string name="artifact_publish_logo_too_large">The logo file must be 512 KiB or smaller.</string>
+    <string name="artifact_publish_logo_market_preview">Preview Market Effect</string>
+    <string name="artifact_publish_logo_market_preview_title">Market Preview</string>
+    <string name="artifact_publish_logo_market_list">List</string>
+    <string name="artifact_publish_logo_market_detail">Details</string>
+    <string name="artifact_publish_logo_market_preview_action">Install Package (Preview)</string>
+    <string name="artifact_publish_logo_market_preview_account">Current account</string>
+    <string name="artifact_publish_logo_market_preview_untitled">Untitled package</string>
+    <string name="artifact_publish_logo_market_preview_empty_description">No description</string>
+    <string name="artifact_publish_github_repository_url">Author GitHub repository link</string>
+    <string name="artifact_publish_load_github_releases">Load Release</string>
+    <string name="artifact_publish_github_release">GitHub Release</string>
+    <string name="artifact_publish_github_release_asset">Release Asset</string>
+    <string name="artifact_publish_stage_resolving_release_asset">Verifying GitHub Release asset</string>
+    <string name="market_detail_contributors">Contributors</string>
+    <string name="market_author_profile_id">Author ID: %1$s</string>
+    <string name="market_author_profile_owned">Published Plugins</string>
+    <string name="market_author_profile_contributed">Contributed Plugins</string>
+    <string name="market_author_profile_loading">Loading author profile...</string>
+    <string name="market_author_profile_empty">This author has no public releases or contributions yet</string>
+    <string name="xml_tag_menu_title">Available Tags</string>
+    <string name="xml_tag_menu_content_description">Select available tags</string>
+    <string name="xml_tag_desc_font">Text Style</string>
+    <string name="xml_tag_desc_details">Collapsible Content</string>
+    <string name="xml_tag_desc_meta">Meta Information</string>
+    <string name="notification_kind_comment_new">New Comment</string>
+    <string name="notification_kind_comment_reply">Replied to your comment</string>
+    <string name="notification_kind_review_approved">Approved</string>
+    <string name="notification_kind_review_rejected">Rejected</string>
+    <string name="notification_kind_review_changes">Changes Required</string>
+    <string name="notification_kind_entry_curated">Featured</string>
+
+    <string name="chat_category_all">All</string>
+    <string name="chat_category_recent">Recent</string>
+    <string name="chat_category_favorites">Favorites</string>
+    <string name="add_to_favorites">Add to favorites</string>
+    <string name="remove_from_favorites">Remove from favorites</string>
+    <string name="permission_review_policy_title">Automatic review policy</string>
+    <string name="permission_review_policy_description">Add review rules here to reflect how you like to work; automatic review follows these rules. Policy version: %1$s</string>
+    <string name="permission_review_policy_edit">Edit managed rules</string>
+    <string name="permission_review_policy_collapse">Collapse policy editor</string>
+    <string name="permission_review_policy_managed_hint">These rules are sent to the review model as your custom requirements, and review judges risk and authorization according to your habits. Only add rules you truly intend to allow.</string>
+    <string name="permission_review_policy_placeholder">Example: Any action publishing data publicly must require manual confirmation.</string>
+    <string name="permission_review_recent_denials">Recent denials</string>
+    <string name="permission_review_recent_denials_summary">%1$d denials across %2$d distinct actions</string>
+    <string name="permission_review_recent_denials_open">View statistics and audit details</string>
+    <string name="permission_review_recent_denials_statistics">Denial statistics</string>
+    <string name="permission_review_denial_total">Total denials</string>
+    <string name="permission_review_denial_unique_actions">Distinct actions</string>
+    <string name="permission_review_recent_denials_description">The 10 most recent distinct denied actions are shown below. Select one to open its review Subagent and inspect the full process.</string>
+    <string name="permission_review_recent_denials_empty">This chat has no actions denied by automatic review</string>
+    <string name="permission_review_open_subagent_details">Open review Subagent details</string>
+    <string name="permission_review_subagent_unavailable">The corresponding review Subagent is unavailable</string>
+    <string name="permission_review_allow_exact_once">Authorize re-review of exact action</string>
+    <string name="permission_review_override_recorded">Authorized; waiting for Agent retry</string>
+    <string name="permission_review_override_in_review">Re-review in progress</string>
+    <string name="permission_review_override_consumed">This authorization was used</string>
+    <string name="permission_review_override_expired">Authorization expired; authorize again</string>
+    <string name="permission_review_override_next_step">Authorization is valid for 5 minutes. Return to the parent chat and ask the Agent to retry the exact action; this button does not execute it directly.</string>
+    <string name="permission_review_lifecycle_in_progress">reviewing</string>
+    <string name="permission_review_lifecycle_approved">approved</string>
+    <string name="permission_review_lifecycle_denied">denied</string>
+    <string name="permission_review_lifecycle_timed_out">timed out</string>
+    <string name="permission_review_lifecycle_aborted">aborted</string>
+    <string name="permission_review_lifecycle_failed">review failed</string>
+    <string name="permission_review_batch_lifecycle">Guardian · batch tool %1$d/%2$d · %3$s · %4$s</string>
+    <string name="permission_review_resolved_allow">Later allowed by you or current settings</string>
+    <string name="permission_review_resolved_deny">Later denied by you or current settings</string>
+    <string name="permission_review_tap_for_details">Tap for status, decision, and review conversation</string>
+    <string name="permission_review_detail_title">Guardian review details</string>
+    <string name="permission_review_detail_status">Status: %1$s</string>
+    <string name="permission_review_detail_action">Action: %1$s</string>
+    <string name="permission_review_detail_risk">Risk level: %1$s</string>
+    <string name="permission_review_detail_authorization">User authorization: %1$s</string>
+    <string name="permission_review_detail_rationale">Decision: %1$s</string>
+    <string name="permission_review_detail_subagent_status">Review subagent: %1$s</string>
+    <string name="permission_review_detail_failure">Failure: %1$s</string>
+    <string name="permission_review_value_low">Low</string>
+    <string name="permission_review_value_medium">Medium</string>
+    <string name="permission_review_value_high">High</string>
+    <string name="permission_review_value_critical">Critical</string>
+    <string name="permission_review_value_unknown">Unknown</string>
+    <string name="permission_review_failure_invalid_output">Invalid structured output</string>
+    <string name="permission_review_failure_timed_out">Review timed out</string>
+    <string name="permission_review_failure_reviewer_error">Reviewer model error</string>
+    <string name="permission_review_open_subagent">Open review conversation</string>
+    <string name="permission_review_circuit_title">Guardian stopped this turn</string>
+    <string name="permission_review_circuit_message">Automatic review denied several actions in a row. To protect your data, the remaining tools were not run and this turn was stopped safely.</string>
+    <string name="permission_review_circuit_countdown">Confirm in %1$d s</string>
+    <string name="permission_review_circuit_confirm">I understand</string>
+    <string name="permission_review_circuit_ready">You can now confirm and close this notice</string>
+    <string name="permission_review_circuit_combined_count">%1$d consecutive safety interruptions combined</string>
+    <string name="permission_review_circuit_what_happened_title">What happened</string>
+    <string name="permission_review_circuit_what_happened_body">Guardian denied several tool calls in this turn. The denied calls and the remaining tools were not run, so the turn was stopped.</string>
+    <string name="permission_review_circuit_what_to_do_title">What you should do</string>
+    <string name="permission_review_circuit_what_to_do_body">Review the audit record and check which operation was denied and why. If it is still needed, return to the main chat and clearly state the exact operation, target, and scope before asking the AI to try again. Do not authorize an operation you do not understand.</string>
+    <string name="token_activity_daily">Daily</string>
+    <string name="token_activity_weekly">Weekly</string>
+    <string name="token_activity_cumulative">Cumulative</string>
+    <string name="token_activity_title">Activity</string>
+    <string name="token_activity_current_streak_badge">%1$d-day streak</string>
+    <string name="token_activity_longest_streak_badge">Longest %1$d days</string>
+    <string name="token_activity_chart_tap_hint">Tap the chart to view details</string>
+    <string name="token_activity_total_tokens">Total tokens</string>
+    <string name="token_activity_peak_tokens">Peak tokens</string>
+    <string name="token_activity_current_streak">Current streak</string>
+    <string name="token_activity_longest_streak">Longest streak</string>
+    <string name="token_activity_days">%1$d days</string>
+    <string name="token_activity_day_detail">%1$s used %2$s tokens</string>
+    <string name="token_activity_week_detail">%1$s - %2$s used %3$s tokens</string>
+    <string name="token_activity_cumulative_detail">%2$s tokens through %1$s</string>
+    <string name="token_activity_tap_hint">Tap a cell to view details</string>
+    <string name="token_activity_less">Less</string>
+    <string name="token_activity_more">More</string>
+    <string name="token_stats_detail_cost">Spending breakdown</string>
+    <string name="token_stats_detail_requests">Request breakdown</string>
+    <string name="token_stats_detail_tokens">Token breakdown</string>
+    <string name="token_stats_detail_close">Close</string>
+    <string name="token_stats_detail_open">Tap to view details</string>
+    <string name="markdown_link_not_openable">This link points to a reference inside the document and cannot be opened</string>
+    <string name="openai_file_omitted">File content omitted, current model does not support file processing</string>
+
+    <string name="provider_openai_codex">OpenAI Codex (ChatGPT OAuth)</string>
+    <string name="onboarding_config_codex_login_required">Sign in to OpenAI Codex first</string>
+    <string name="codex_login_title">Sign in to OpenAI Codex</string>
+    <string name="codex_login_starting">Preparing Codex sign-in...</string>
+    <string name="codex_login_waiting">Complete sign-in in your browser</string>
+    <string name="codex_login_action">Sign in with ChatGPT</string>
+    <string name="codex_login_success">OpenAI Codex sign-in succeeded</string>
+    <string name="codex_login_failed">OpenAI Codex sign-in failed: %1$s</string>
+    <string name="codex_logout_action">Sign out of Codex</string>
+    <string name="codex_logout_success">Signed out of OpenAI Codex</string>
+    <string name="codex_auth_title">OpenAI Codex account</string>
+    <string name="codex_auth_not_logged_in">Sign in with ChatGPT to use Codex subscription access</string>
+    <string name="codex_auth_account">Account: %1$s</string>
+    <string name="codex_endpoint_fixed">The Codex endpoint is fixed by the system</string>
+    <string name="codex_plan">Plan: %1$s</string>
+    <string name="codex_direct_media_processing">Direct image/PDF input</string>
+    <string name="codex_direct_media_processing_desc">Send images and PDFs directly to Codex</string>
+    <string name="codex_quota_five_hour">Last 5 hours</string>
+    <string name="codex_quota_seven_day">Last 7 days</string>
+    <string name="codex_quota_remaining">%1$d%% remaining</string>
+    <string name="codex_quota_no_data">No data</string>
+    <string name="codex_usage_refresh">Refresh Codex usage</string>
+    <string name="codex_usage_unavailable">Usage is temporarily unavailable</string>
+    <string name="codex_reset_after_days">Resets in %1$d days</string>
+    <string name="codex_reset_after_clock">Resets in %1$02d:%2$02d</string>
+    <string name="conversation_media_file_link">&lt;link type=&quot;file&quot; id=&quot;%1$s&quot; filename=&quot;%2$s&quot;&gt;PDF&lt;/link&gt;</string>
+
+    <string name="package_market_origin_title">External Package Source Notice</string>
+    <string name="package_market_origin_message">This package is from the Operit market.\nPackage name: %1$s\nVersion: %2$s\nAuthor: %3$s\nPlease support the original author and be cautious of unauthorized resale.</string>
+    <string name="thinking_config_title">Thinking Configuration</string>
+    <string name="thinking_config_subtitle">Matches thinking parameters in rule order; first match takes effect</string>
+    <string name="thinking_config_rule_order_hint">Rules are matched from top to bottom; the first enabled and matching rule takes effect. Use the arrows on the right side of each rule to adjust the order.</string>
+    <string name="thinking_config_rule_move_up">Move rule up</string>
+    <string name="thinking_config_rule_move_down">Move rule down</string>
+    <string name="token_stats_unit_millions">M</string>
+    <string name="token_stats_unit_billions">B</string>
+    <string name="token_stats_unit_toggle_description">Current token unit is %1$s, click to switch to %2$s</string>
+    <string name="market_manage_submit_revision">Submit new version after modification</string>
+    <string name="market_manage_loading_request_title">Loading Request</string>
+    <string name="market_manage_loading_request_message">Request is being processed, please wait…</string>
+    <string name="market_version_incompatible_title">Cannot Download: Client Version Not Supported</string>
+    <string name="market_version_too_low_message">Current client version %1$s is lower than the minimum required version %2$s for this resource. Please update the client before downloading.</string>
+    <string name="market_version_too_high_message">Current client version %1$s is higher than the maximum supported version %2$s for this resource. Please use a supported client version.</string>
+    <string name="thinking_config_invalid_json">Invalid Thinking Configuration</string>
 </resources>

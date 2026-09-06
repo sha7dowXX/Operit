@@ -896,8 +896,72 @@ $toolList
         duplicatesPromptPart: String,
         existingMemoriesPrompt: String,
         existingFoldersPrompt: String,
-        useEnglish: Boolean
+        useEnglish: Boolean,
+        memoryExtractionCustomRules: String,
+        profileDocument: String = "",
+        profileUpdateEnabled: Boolean = false
     ): String {
+        val profileUpdateInstruction =
+            if (profileUpdateEnabled) {
+                if (useEnglish) {
+                    """
+
+[Active memory-space profile]
+The active memory space owns the following Markdown user profile:
+<user_profile_document>
+$profileDocument
+</user_profile_document>
+
+When this conversation confirms a stable user-specific preference, constraint, identity fact, or
+communication preference, preserve all useful existing Markdown and return a complete replacement
+document in `profile_markdown`. Return JSON null when no profile change is justified. Never remove
+useful existing content, store temporary requests, or add generic knowledge.
+""".trimIndent()
+                } else {
+                    """
+
+【当前记忆空间资料】
+当前记忆空间拥有以下 Markdown 用户资料：
+<user_profile_document>
+$profileDocument
+</user_profile_document>
+
+当本轮明确确认了稳定的用户偏好、约束、身份事实或交流方式时，保留已有 Markdown 中仍有价值的全部内容，
+并在 `profile_markdown` 中返回完整替换文档。没有充分依据时返回 JSON null。不得删除已有有效内容、记录临时要求或写入常识。
+""".trimIndent()
+                }
+            } else {
+                ""
+            }
+        val profileMarkdownSchemaLine =
+            if (profileUpdateEnabled) {
+                if (useEnglish) {
+                    "- `profile_markdown`: complete replacement Markdown for the active memory-space profile, or JSON null."
+                } else {
+                    "- `profile_markdown`：当前记忆空间资料的完整替换 Markdown，没有更新时使用 JSON null。"
+                }
+            } else {
+                ""
+            }
+        val memoryExtractionCustomRulesInstruction = if (useEnglish) {
+            """
+
+[User-specified memory extraction rules]
+<memory_extraction_custom_rules>
+$memoryExtractionCustomRules
+</memory_extraction_custom_rules>
+Use these rules to refine the memory domain, retention focus, folder selection, tags, or writing style. The selection gate, evidence requirements, and strict JSON output contract remain mandatory.
+""".trimIndent()
+        } else {
+            """
+
+【用户指定的记忆提取附加规则】
+<memory_extraction_custom_rules>
+$memoryExtractionCustomRules
+</memory_extraction_custom_rules>
+使用这些规则细化记忆领域、入库重点、文件夹、标签或写法。写入前筛选、证据要求和严格 JSON 输出协议仍然必须遵守。
+""".trimIndent()
+        }
         return if (useEnglish) {
             """
 You are building a long-term memory graph from this conversation.
@@ -913,6 +977,7 @@ $existingFoldersPrompt
 - If no valuable long-term signal exists, return `{}`.
 
 [Extraction policy]
+- A provided existing memory is a retrieval hint, not evidence. Update, merge, or link it only when the conversation explicitly establishes the same subject and fact; otherwise ignore it.
 - Prefer `update` / `merge` over creating `new`.
 - Use `new` only when concept is truly novel (max 5 items).
 - In long-running fiction, recurring characters/places/factions/rules/timeline constraints are valid memories.
@@ -937,6 +1002,7 @@ $existingFoldersPrompt
 - Bad title patterns: `What is X`, `Definition of X`, generic encyclopedia headings.
 - Content should describe happened facts and current confirmed state only.
 - Do not write future actions, TODOs, or speculative plans in content.
+$memoryExtractionCustomRulesInstruction
 
 [Link rules]
 - Create a link only when the relation is explicitly supported by conversation evidence.
@@ -966,14 +1032,16 @@ $existingFoldersPrompt
 - Current turn confirms relation between an existing memory and a new/existing event: add a link even if `new` is empty.
 
 [Output schema - strict JSON only]
-- Keys: `main`, `new`, `update`, `merge`, `links`.
-- `main`: `["Title", "Content", ["tags"], "folder_path"]` or `null`.
-- `new`: `[["Title", "Content", ["tags"], "folder_path", "alias_for_or_null"], ...]`.
-- `update`: `[["Title", "New full content", "Reason", credibility_or_null, importance_or_null], ...]`.
-- `merge`: `[{"source_titles":["A","B"],"new_title":"...","new_content":"...","new_tags":["..."],"folder_path":"...","reason":"..."}, ...]`.
-- `links`: `[["Source", "Target", "RELATION_TYPE", "Description", weight], ...]` (type must be UPPER_SNAKE_CASE).
-- Numeric ranges: `credibility_or_null`, `importance_or_null`, and link `weight` must be JSON numbers between 0.0 and 1.0 inclusive, or JSON `null` where the schema allows null.
-- Use JSON `null` for missing optional values.
+- Except for `{}`, always include `main`, `new`, `update`, `merge`, and `links`${if (profileUpdateEnabled) ", `profile_markdown`" else ""}. Every array item must be a named object; positional arrays are forbidden.
+- `main`: `null` or `{"title":"...","content":"...","tags":["..."],"folder_path":"..."}`.
+- `new`: `[{"title":"...","content":"...","tags":["..."],"folder_path":"...","alias_for":null}, ...]`.
+- `update`: `[{"title":"...","content":"new full content","reason":"...","credibility":null,"importance":null}, ...]`.
+- `merge`: `[{"source_titles":["A","B"],"title":"...","content":"...","tags":["..."],"folder_path":"...","reason":"..."}, ...]`.
+- `links`: `[{"source":"...","target":"...","type":"UPPER_SNAKE_CASE","description":"...","weight":0.0}, ...]`.
+- `credibility`, `importance`, and `weight` are JSON numbers from 0.0 to 1.0; `credibility`, `importance`, and `alias_for` may be JSON `null`.
+$profileMarkdownSchemaLine
+
+$profileUpdateInstruction
 
 Return only a valid JSON object. No extra text.
 """.trimIndent()
@@ -992,6 +1060,7 @@ $existingFoldersPrompt
 - 若没有长期价值信号，直接返回 `{}`。
 
 【抽取策略】
+- 提供的已有记忆只是检索线索，不是事实证据；只有对话明确证明主体和事实相同时才可 `update`、`merge` 或连边，否则忽略该候选。
 - 优先 `update` / `merge`，其次才是 `new`。
 - `new` 仅在确实新增概念时使用（最多 5 条）。
 - 长期小说/世界观场景中，反复出现且影响连续性的角色、地点、组织、规则、时间线可以入库。
@@ -1016,6 +1085,7 @@ $existingFoldersPrompt
 - 不推荐标题：`X是什么`、`X的定义`、百科式泛标题。
 - 内容只写"已发生事实 + 当前已确认状态"。
 - 内容禁止写未来动作、TODO、推测性计划。
+$memoryExtractionCustomRulesInstruction
 
 【连接关系规则】
 - 只有当对话里有明确证据时才建边。
@@ -1045,14 +1115,16 @@ $existingFoldersPrompt
 - 本轮确认了"已有样本记忆"和其他记忆的明确关系：即使没有 `new`，也应在 `links` 中体现。
 
 【输出格式（严格JSON）】
-- 顶层键：`main`、`new`、`update`、`merge`、`links`。
-- `main`: `["标题","内容",["标签"],"folder_path"]` 或 `null`。
-- `new`: `[["标题","内容",["标签"],"folder_path","alias_for_or_null"], ...]`。
-- `update`: `[["标题","新完整内容","原因",可信度或null,重要性或null], ...]`。
-- `merge`: `[{"source_titles":["A","B"],"new_title":"...","new_content":"...","new_tags":["..."],"folder_path":"...","reason":"..."}, ...]`。
-- `links`: `[["源","目标","RELATION_TYPE","描述",权重], ...]`，关系类型用大写下划线。
-- 数值范围：可信度、重要性、链接权重必须是 0.0 到 1.0（含边界）的 JSON 数字；允许缺失的位置使用 JSON `null`。
-- 可选值缺失时使用 JSON `null`。
+- 除返回 `{}` 外，必须包含 `main`、`new`、`update`、`merge`、`links`${if (profileUpdateEnabled) "、`profile_markdown`" else ""}；数组中的每一项必须是具名对象，禁止位置数组。
+- `main`：`null` 或 `{"title":"...","content":"...","tags":["..."],"folder_path":"..."}`。
+- `new`：`[{"title":"...","content":"...","tags":["..."],"folder_path":"...","alias_for":null}, ...]`。
+- `update`：`[{"title":"...","content":"新完整内容","reason":"...","credibility":null,"importance":null}, ...]`。
+- `merge`：`[{"source_titles":["A","B"],"title":"...","content":"...","tags":["..."],"folder_path":"...","reason":"..."}, ...]`。
+- `links`：`[{"source":"...","target":"...","type":"大写下划线关系","description":"...","weight":0.0}, ...]`。
+- 可信度、重要性、权重必须是 0.0 到 1.0 的 JSON 数字；可信度、重要性和 `alias_for` 可用 JSON `null`。
+$profileMarkdownSchemaLine
+
+$profileUpdateInstruction
 
 只返回合法 JSON 对象，不要输出其他内容。
 """.trimIndent()

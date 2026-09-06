@@ -332,7 +332,7 @@ fun MCPConfigScreen(
         }
     }
 
-    LaunchedEffect(toolRefreshTrigger) {
+    LaunchedEffect(toolRefreshTrigger, mcpConfigSnapshot) {
         if (toolRefreshTrigger == 0) {
             return@LaunchedEffect
         }
@@ -345,26 +345,38 @@ fun MCPConfigScreen(
             return@LaunchedEffect
         }
 
-        AppLogger.d("MCPConfigScreen", "Fetching tools for configured runtime-ready services...")
+        AppLogger.d("MCPConfigScreen", "Fetching tools for configured services...")
 
         val toolsMap = mutableMapOf<String, List<String>>()
+        // Keep discovering tools after the page becomes interactive; only the full-screen mask is bounded.
+        val fullscreenLoadingTimeout = launch {
+            delay(2_000)
+            isToolsLoading = false
+        }
 
         try {
-            val bridgeServiceTools = parseMCPServiceToolNames(
-                MCPBridge.getInstance(context).listMcpServices()
-            )
+            val hasLocalPlugins = visiblePluginIds.any { pluginId ->
+                mcpConfigSnapshot.pluginMetadata[pluginId]?.type != "remote"
+            }
+            val bridgeServiceTools = if (hasLocalPlugins) {
+                parseMCPServiceToolNames(MCPBridge.getInstance(context).listMcpServices())
+            } else {
+                emptyMap()
+            }
 
             for (pluginId in visiblePluginIds) {
                 try {
                     val metadata = mcpConfigSnapshot.pluginMetadata[pluginId]
                     val isRemote = metadata?.type == "remote"
-                    val isDeployed = if (isRemote) true else mcpLocalServer.isPluginRuntimeReady(pluginId)
-                    if (!isDeployed) {
-                        AppLogger.d("MCPConfigScreen", "Plugin $pluginId runtime directory is not ready, skip tool fetch.")
-                        continue
+                    val toolNames = if (isRemote) {
+                        mcpRepository.getRemoteToolNames(pluginId)
+                    } else {
+                        if (!mcpLocalServer.isPluginRuntimeReady(pluginId)) {
+                            AppLogger.d("MCPConfigScreen", "Plugin $pluginId runtime directory is not ready, skip tool fetch.")
+                            continue
+                        }
+                        bridgeServiceTools[pluginId].orEmpty()
                     }
-
-                    val toolNames = bridgeServiceTools[pluginId].orEmpty()
 
                     if (toolNames.isNotEmpty()) {
                         toolsMap[pluginId] = toolNames
@@ -390,6 +402,7 @@ fun MCPConfigScreen(
             AppLogger.e("MCPConfigScreen", "Error fetching tools", e)
             Toast.makeText(context, context.getString(R.string.tools_load_error, e.message), Toast.LENGTH_SHORT).show()
         } finally {
+            fullscreenLoadingTimeout.cancel()
             isToolsLoading = false
         }
     }
@@ -1467,6 +1480,10 @@ private fun getPluginAsServer(
             isRemote ||
             (pluginInfo?.isInstalled == true)
 
+    if (metadataFromConfig?.type == "remote") {
+        return metadataFromConfig.copy(isInstalled = isInstalled)
+    }
+
     // 尝试从内存中的服务器列表查找
     val existingServer = mcpRepository.mcpServers.value.find { it.id == pluginId }
 
@@ -1491,7 +1508,9 @@ private fun getPluginAsServer(
         repoUrl = pluginInfo?.repoUrl ?: "",
         type = pluginInfo?.type ?: "local",
         endpoint = pluginInfo?.endpoint,
-        connectionType = pluginInfo?.connectionType
+        connectionType = pluginInfo?.connectionType,
+        bearerToken = pluginInfo?.bearerToken,
+        headers = pluginInfo?.headers
     )
 }
 

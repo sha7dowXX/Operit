@@ -4,6 +4,8 @@
 
 **ToolPkg** 是 Operit 项目中用于打包和分发工具包的标准格式。它允许开发者将多个相关的工具脚本、资源文件和 UI 模块打包成一个单一的、易于分发和管理的文件。
 
+本文档的格式、manifest 与运行时说明适用于所有 ToolPkg 作者。文中 `tools/toolpkg/debug_toolpkg.*` 的命令适用于拥有 Operit 源码仓库和 ADB 的桌面开发环境；应用内 AI 协作开发应先更新 `SandboxPackage_DEV`，并遵循其本地 `SKILL.md` 指定的目录与调试方式。
+
 ### 1.1 什么是 ToolPkg？
 
 - **文件格式**：`.toolpkg` 文件本质上是一个标准的 ZIP 压缩包
@@ -37,7 +39,10 @@ windows_control.toolpkg (ZIP 压缩包)
 ├── ui/                                    # UI 模块目录
 │   └── windows_setup/
 │       └── index.ui.js                    # UI 模块脚本
+├── modules/                               # 可选 WASM 核心模块
+│   └── core.wasm                          # AssemblyScript 编译产物
 ├── resources/                             # 资源文件目录
+│   ├── logo.svg                            # 可选包 Logo
 │   └── pc_agent/
 │       └── operit-pc-agent/              # 目录资源（readResource 时自动导出为 zip）
 └── i18n/                                  # 国际化文件（可选）
@@ -70,6 +75,8 @@ windows_control.toolpkg (ZIP 压缩包)
   "schema_version": 1,
   "toolpkg_id": "com.operit.windows_bundle",
   "version": "0.2.0",
+  "api_version": "1.0.0",
+  "requires": [],
   "author": ["Operit Team", "Alice"],
   "main": "main.js",
   "display_name": {
@@ -80,6 +87,7 @@ windows_control.toolpkg (ZIP 压缩包)
     "zh": "Windows 一键配置与控制工具包",
     "en": "Windows one-click setup and control bundle"
   },
+  "logo": "package_logo",
   "subpackages": [
     {
       "id": "windows_control",
@@ -97,9 +105,23 @@ windows_control.toolpkg (ZIP 压缩包)
   ],
   "resources": [
     {
+      "key": "package_logo",
+      "path": "resources/logo.svg",
+      "mime": "image/svg+xml"
+    },
+    {
       "key": "pc_agent_zip",
       "path": "resources/pc_agent/operit-pc-agent.zip",
       "mime": "application/zip"
+    }
+  ],
+  "wasm_modules": [
+    {
+      "id": "core",
+      "path": "modules/core.wasm",
+      "exports": ["isPrime", "nthPrime"],
+      "source_language": "assemblyscript",
+      "abi": "assemblyscript"
     }
   ],
   "workflow_templates": [
@@ -143,14 +165,76 @@ windows_control.toolpkg (ZIP 压缩包)
 | `schema_version` | number | 是 | 清单架构版本，当前为 `1` |
 | `toolpkg_id` | string | 是 | 包的唯一标识符，建议使用反向域名格式（如 `com.operit.windows_bundle`） |
 | `version` | string | 否 | 包的版本号，建议使用语义化版本（如 `0.2.0`） |
+| `api_version` | string | 否 | 包使用的 ToolPkg API 版本，严格使用 `major.minor.patch` 格式；省略时按 `1.0.0` 处理 |
+| `requires` | object[] | 否 | 包必须加载的依赖。每项包含目标包 ID、用途说明和可选版本范围；依赖同时决定加载顺序 |
 | `author` | string \| string[] | 否 | 作者信息，支持单个作者字符串或作者字符串数组 |
 | `main` | string | 是 | ToolPkg 主入口脚本路径（相对于 ZIP 根目录），用于执行注册函数 |
 | `display_name` | LocalizedText | 否 | 包的显示名称，支持多语言 |
 | `description` | LocalizedText | 否 | 包的描述信息，支持多语言 |
+| `logo` | string | 否 | 包 Logo 对应的 `resources[].key`；支持 SVG、PNG、JPEG 和 WebP |
 | `subpackages` | array | 否 | 子包列表，每个子包是一个独立的工具集 |
 | `resources` | array | 否 | 资源文件列表，可以是任意类型的文件 |
+| `wasm_modules` | array | 否 | 企业核心算法模块列表，当前用于声明和校验 `.wasm` 产物 |
 | `workflow_templates` | array | 否 | 注册到宿主“工作流”入口的工作流模板列表 |
 | `workspace_templates` | array | 否 | 注册到宿主“工作区创建”入口的工作区模板列表 |
+
+#### ToolPkg API 版本
+
+`api_version` 描述的是包调用的宿主 ToolPkg API，不是包自身的 `version`。未声明该字段的历史包使用 `1.0.0`。
+
+Operit 的 ToolPkg API 支持关系如下：
+
+| Operit 版本 | 支持的 ToolPkg API |
+|------|------|
+| `1.12.1+4` 之前 | `1.0.0` |
+| `1.12.1+4` 及之后 | `1.0.0`、`1.0.1` |
+
+`1.0.1` 包含 `1.12.1+4` 之后新增的 ToolPkg 公开能力，目前包括聊天运行态 Hook、消息长按菜单注册、Compose DSL 弹窗组件和 `Tools.Chat.call` 功能模型调用。
+
+类型文件保持一份最新版声明，并用 `@since ToolPkg API x.y.z` 标注公开能力的引入版本。使用这些能力时，manifest 的 `api_version` 需要不低于对应版本。
+
+当前应用不支持 manifest 声明的 API 版本时，包会显示在包加载错误中，并附带当前应用版本和支持的 API 版本。
+
+#### 市场发布中的 API 版本
+
+发布 ToolPkg 时，市场版本信息会记录 manifest 中的 `api_version`。这个字段描述宿主 ToolPkg API，不是包自身的 `version`，也不是归档格式的 `formatVer`。发布前如需调整该值，应修改 manifest。
+
+市场列表、详情和历史版本会展示 ToolPkg API 版本。历史包未记录该值时，按 `1.0.0` 理解。
+
+#### 包依赖与加载顺序
+
+`requires` 是 manifest 的包依赖声明，不属于 ToolPkg JavaScript API。每项都使用对象格式，可以引用 ToolPkg 容器、ToolPkg 子包或普通脚本包。依赖包会先于声明方加载，因此 `requires` 同时表达“必须加载什么”和“加载顺序”。
+
+启用声明了 `requires` 的包时，宿主会把依赖包加入启用集合。被其他已启用 ToolPkg 依赖的包不能直接关闭，必须先处理依赖它的包。
+
+```json
+{
+  "toolpkg_id": "com.example.feature",
+  "requires": [
+    {
+      "id": "com.example.shared",
+      "description": "提供共享运行能力",
+      "min_version": "1.2.0",
+      "max_version": "2.0.0"
+    }
+  ]
+}
+```
+
+`description` 用于在包管理界面向用户说明依赖用途。`min_version` 和 `max_version` 都是可选的，表示目标包自身版本的下限和上限，不是 ToolPkg API 版本。插件列表中的拖动顺序是没有依赖关系时的基础顺序；`requires` 产生的依赖顺序优先于这个基础顺序，循环关系会使相关包加载失败。
+
+| 依赖字段 | 类型 | 必需 | 说明 |
+|------|------|------|------|
+| `id` | string | 是 | 被依赖包的 ID，可以是 ToolPkg 容器、ToolPkg 子包或普通脚本包 |
+| `description` | string | 是 | 依赖用途的简短说明，用于包管理界面展示 |
+| `min_version` | string | 否 | 被依赖包允许的最低版本，格式为 `major.minor.patch` |
+| `max_version` | string | 否 | 被依赖包允许的最高版本，格式为 `major.minor.patch` |
+
+发布 ToolPkg 时仅使用归档中已有的 `manifest.logo` 资源。市场条目可以展示该资源对应的 Logo。
+
+#### 压缩发布
+
+发布时可选择对 ToolPkg 的可执行 JavaScript 条目进行 AST 压缩。压缩后的产物仍是普通 ZIP，保持原有市场下载、外部导入和调试安装方式。
 
 #### 3.2.2 LocalizedText 类型
 
@@ -211,9 +295,99 @@ windows_control.toolpkg (ZIP 压缩包)
 - 必须包含 `METADATA` 注释块（参考 [SCRIPT_DEV_GUIDE.md](./SCRIPT_DEV_GUIDE.md)）
 - 脚本中定义的工具会被注册为 `<subpackage_id>:<tool_name>` 格式
 
-#### 3.2.4 Main 脚本注册
+#### 3.2.4 WASM 模块
+
+`wasm_modules` 用于声明企业插件的核心算法模块。推荐由 AssemblyScript 编译得到 `.wasm`，插件作者入口写 `src/main.ts`，再通过同目录内的 typed facade 调用 WASM；打包阶段生成宿主执行用的 `main.js`。
+
+```json
+{
+  "id": "core",
+  "path": "modules/core.wasm",
+  "exports": ["isPrime", "nthPrime"],
+  "source_language": "assemblyscript",
+  "abi": "assemblyscript"
+}
+```
+
+| 字段 | 类型 | 必需 | 说明 |
+|------|------|------|------|
+| `id` | string | 是 | 模块 ID，在容器内必须唯一 |
+| `path` | string | 是 | `.wasm` 文件路径（相对于 manifest 所在目录） |
+| `exports` | string[] | 否 | 计划暴露给 JS 桥的导出函数名 |
+| `source_language` | string | 否 | 源语言标记，AssemblyScript 模块写 `assemblyscript` |
+| `abi` | string | 否 | 调用约定标记，AssemblyScript 模块写 `assemblyscript` |
+
+推荐结构：
+
+```text
+my_toolpkg/
+├── manifest.json
+├── package.json
+├── src/
+│   ├── main.ts
+│   └── wasm/
+│       ├── core.ts
+│       └── core.as.ts
+├── build/
+│   └── main.js
+└── modules/
+    └── core.wasm
+```
+
+AssemblyScript 核心模块示例 `src/wasm/core.as.ts`：
+
+```ts
+export function isPrime(n: i32): i32 {
+  if (n < 2) return 0;
+  for (let divisor: i32 = 2; divisor <= n / divisor; divisor += 1) {
+    if (n % divisor === 0) return 0;
+  }
+  return 1;
+}
+```
+
+编译示例：
+
+```bash
+npx asc src/wasm/core.as.ts --outFile modules/core.wasm --optimize
+```
+
+当前接入范围：
+
+- `manifest` 会校验模块 ID、`.wasm` 路径和导出名。
+- 发布时可选择对包内可执行 JavaScript 进行 AST 压缩；`.wasm` 与其他资源保持标准 ToolPkg ZIP 内容。
+- JS 运行时仍以 `main.js` 和已有 `exports` 为插件对外接口；`main.js` 可以由 TS 构建生成。
+- `ToolPkg.wasm.call(moduleId, exportName, args)` 已接入 native WAMR runtime，当前 ABI 支持 `i32`、`i64`、`f32`、`f64` 数值参数和返回值。
+- `ToolPkg.wasm.call(...)` 不可在 `registerToolPkg()` 执行期间调用，调用会立即抛出异常。
+- `i64` 结果以字符串返回；JS 传入 `i64` 时推荐使用字符串，避免超过 JS safe integer 后丢精度。
+
+TS facade 示例 `src/wasm/core.ts`：
+
+```ts
+export async function isPrime(n: number): Promise<boolean> {
+  const result = await ToolPkg.wasm.call("core", "isPrime", [{ type: "i32", value: n }]);
+  if (typeof result !== "number") {
+    throw new Error("core.isPrime returned a non-number result");
+  }
+  return result === 1;
+}
+```
+
+主入口示例 `src/main.ts`：
+
+```ts
+import { isPrime } from "./wasm/core";
+
+export async function run(params: { n: number }) {
+  return { is_prime: await isPrime(params.n) };
+}
+```
+
+#### 3.2.5 Main 脚本注册
 
 ToolPkg 的 UI 模块和生命周期钩子不再写在 `manifest` 里，而是由 `main` 脚本通过注册函数声明。
+
+`registerToolPkg()` 只用于声明注册项。`ToolPkg.readResource(...)` 和 `ToolPkg.wasm.call(...)` 在此阶段会立即抛出异常。
 
 `main.js` 示例：
 
@@ -289,6 +463,25 @@ function registerToolPkg() {
     function: onInputMenuToggle
   });
 
+  ToolPkg.registerChatMessageMenuItem({
+    id: "windows_translate_message",
+    title: {
+      zh: "翻译",
+      en: "Translate"
+    },
+    icon: "translate",
+    order: 20,
+    senders: ["user", "ai"],
+    dialog: {
+      screen: "dist/ui/message_dialog.ui.js",
+      title: {
+        zh: "消息操作",
+        en: "Message Action"
+      }
+    },
+    function: onMessageMenuItem
+  });
+
   return true;
 }
 
@@ -326,11 +519,22 @@ function onInputMenuToggle(params) {
   return { ok: false };
 }
 
+function onMessageMenuItem(event) {
+  return {
+    dialog: {
+      state: {
+        message: event.eventPayload.message
+      }
+    }
+  };
+}
+
 exports.registerToolPkg = registerToolPkg;
 exports.onApplicationCreate = onApplicationCreate;
 exports.onMessageProcessing = onMessageProcessing;
 exports.onXmlRender = onXmlRender;
 exports.onInputMenuToggle = onInputMenuToggle;
+exports.onMessageMenuItem = onMessageMenuItem;
 ```
 
 注册项字段：
@@ -372,6 +576,15 @@ exports.onInputMenuToggle = onInputMenuToggle;
 | `ToolPkg.registerXmlRenderPlugin` | `function` | 是 | 函数引用（支持箭头函数） |
 | `ToolPkg.registerInputMenuTogglePlugin` | `id` | 是 | 输入菜单开关插件唯一标识 |
 | `ToolPkg.registerInputMenuTogglePlugin` | `function` | 是 | 函数引用（支持箭头函数） |
+| `ToolPkg.registerChatMessageMenuItem` | `id` | 是 | 消息长按菜单项唯一标识，需要 ToolPkg API `1.0.1` |
+| `ToolPkg.registerChatMessageMenuItem` | `title` | 是 | 菜单文案，支持 `LocalizedText` |
+| `ToolPkg.registerChatMessageMenuItem` | `icon` | 否 | Material 图标名，例如 `translate`、`info` |
+| `ToolPkg.registerChatMessageMenuItem` | `order` | 否 | 排序值，越小越靠前 |
+| `ToolPkg.registerChatMessageMenuItem` | `senders` | 否 | 允许出现的消息发送方，当前支持 `user`、`ai` |
+| `ToolPkg.registerChatMessageMenuItem` | `dialog.screen` | 否 | 点击后可打开的 Compose DSL 弹窗资源路径或 screen 引用 |
+| `ToolPkg.registerChatMessageMenuItem` | `function` | 是 | 点击回调函数，可返回 `dialog.state` 和 `dialog.moduleSpec` |
+
+`registerChatMessageMenuItem` 的点击事件名是 `chat_message_menu_item_click`。事件载荷包含 `chatId`、`messageIndex`、`menuItemId` 和当前消息快照。若注册项声明了 `dialog.screen`，宿主会把这些字段写入弹窗 DSL 的初始 `state`，插件函数返回的 `dialog.state` 会一并传入弹窗。
 
 `ToolPkg.registerAppLifecycleHook` 支持的 `event`：
 
@@ -529,10 +742,11 @@ await ToolPkg.ipc.call(
 **访问资源**：
 - 在子包脚本中：通过 PackageManager API 访问
 - 在 UI 模块中：通过 `ToolPkg.readResource(key)` 访问
+- `ToolPkg.readResource(...)` 不可在 `registerToolPkg()` 执行期间调用，调用会立即抛出异常。
 
 目录资源说明：
 - 当 `mime` 是目录类型（如 `inode/directory`、`vnd.android.document/directory`）时，`ToolPkg.readResource(key)` 会先将该目录压缩成 zip，再返回这个 zip 的临时文件路径。
-- 如果没有显式传 `outputFileName`，目录资源默认会自动补上 `.zip` 后缀。
+- 未显式传 `outputFileName` 时，目录资源默认会自动补上 `.zip` 后缀。
 
 #### 3.2.7 Workflow Templates（工作流模板）
 
@@ -684,25 +898,25 @@ Compress-Archive -Path my_toolpkg\* -DestinationPath my_toolpkg.toolpkg
 
 ### 4.2 使用 Python 脚本自动打包
 
-项目提供了 `sync_example_packages.py` 脚本，可以自动将 `examples/` 目录下的包打包成 `.toolpkg` 文件。
+项目提供了 `tools/example_packages/sync_example_packages.py` 脚本，可以自动将 `examples/` 目录下的包打包成 `.toolpkg` 文件。
 
 **使用方法**：
 
 ```bash
 # 打包所有白名单中的包
-python sync_example_packages.py
+python tools/example_packages/sync_example_packages.py
 
 # 以“非白名单附加”的方式打包特定包
-python sync_example_packages.py --include windows_control
+python tools/example_packages/sync_example_packages.py --include windows_control
 
 # 例如只额外同步 template_try 这个示例
-python sync_example_packages.py --include template_try
+python tools/example_packages/sync_example_packages.py --include template_try
 
 # 查看打包结果（不实际写入）
-python sync_example_packages.py --dry-run
+python tools/example_packages/sync_example_packages.py --dry-run
 
 # 删除不在白名单中的包
-python sync_example_packages.py --delete-extra
+python tools/example_packages/sync_example_packages.py --delete-extra
 ```
 
 **工作原理**：
@@ -710,6 +924,8 @@ python sync_example_packages.py --delete-extra
 2. 查找包含 `manifest.json` 或 `manifest.hjson` 的文件夹
 3. 将整个文件夹打包成 `.toolpkg` ZIP 文件
 4. 输出到 `app/src/main/assets/packages/` 目录
+
+脚本启用设备热更新时，会按 Debug、Release 顺序识别已安装的 applicationId，并把包推送到对应的 `Android/data/<applicationId>/files/packages/` 目录。两种 APK 同时安装时，可传 `--app-package <applicationId>` 或设置 `OPERIT_APP_PACKAGE` 明确目标。
 
 ## 5. 子包脚本开发
 
@@ -947,6 +1163,26 @@ exports.default = Screen;
 - `Checkbox`：复选框
 - `Card`：卡片
 - `Icon`：图标
+- `AlertDialog`：Material3 标准弹窗，需要 ToolPkg API `1.0.1`
+- `Dialog`：自定义内容弹窗，需要 ToolPkg API `1.0.1`
+- `AiChat`：嵌入当前主聊天的消息列表和输入区，不包含工作区
+- `AdaptiveSidePanel`：宽屏可拖拽分栏、窄屏覆盖层的自适应侧栏
+
+`AdaptiveSidePanel` 的第二个参数是主内容，`side` 是侧栏内容。两者都必须恰好传入一个节点；`open` 与 `onOpenChanged` 由插件状态管理。默认在 600dp 以上使用分栏，侧栏初始宽度为 360dp，最小宽度为 280dp，主内容至少保留 320dp。
+
+```javascript
+function Screen(ctx) {
+    const [sideOpen, setSideOpen] = ctx.useState('sideOpen', true);
+
+    return ctx.UI.AdaptiveSidePanel({
+        open: sideOpen,
+        onOpenChanged: setSideOpen,
+        side: ctx.UI.Column({ padding: 16 }, [
+            ctx.UI.Text({ text: 'Plugin side panel' })
+        ])
+    }, ctx.UI.AiChat());
+}
+```
 
 #### 进度组件
 - `LinearProgressIndicator`：线性进度条
@@ -1012,12 +1248,33 @@ ctx.reportError(error);
 `ctx.getHostRoutes()` 只返回宿主 Native 路由，便于插件显式发现可用原生页面。
 Native 路由 ID 命名规则：`native.<Screen对象名的snake_case>`，例如 `Screen.Toolbox -> native.toolbox`。
 
+#### 文件选择
+
+`ctx.openFilePicker(options?)` 使用一个 `picker` 字段选择来源。省略时使用文档选择。
+
+```javascript
+const images = await ctx.openFilePicker({
+    picker: 'image',
+    allowMultiple: true
+});
+
+const directory = await ctx.openFilePicker({
+    picker: 'directory',
+    persistPermission: true
+});
+```
+
+- `document`：文档选择，可使用 `mimeTypes`、`allowMultiple` 和 `persistPermission`
+- `image`、`video`、`media`：系统视觉媒体选择，分别限定图片、视频、或两者；可使用 `allowMultiple`
+- `directory`：目录选择，可使用 `persistPermission`
+- `camera`：拍摄一张 JPEG 图片
+
+每个结果都含有 `uri`。文档、视觉媒体和相机结果还会含有临时本地 `path`，目录结果只提供 `uri`。不能用于该来源的选项会使调用失败，不能被静默忽略。
+
 兼容说明：
 
 - `ToolPkg.registerToolboxUiModule(...)` 仍然保留。
-- 宿主内部会把它自动映射为：
-  - 注册一个 `compose_dsl` UI route
-  - 自动挂载一个 `toolbox` 导航入口
+- 调用后会注册一个 `compose_dsl` UI route，并挂载到 `toolbox` 导航入口。
 - 旧接口不会自动创建主侧边栏插件入口；若需要主侧边栏插件入口，请额外调用 `ToolPkg.registerNavigationEntry(...)` 并使用 `surface: "main_sidebar_plugins"`。
 
 #### 其他
@@ -1051,7 +1308,11 @@ const spec = ctx.getModuleSpec();
 ]
 ```
 
-### 7.2 访问资源
+### 7.2 WASM 模块资源
+
+`wasm_modules` 声明的 `.wasm` 文件不需要同时写入 `resources`。它们由宿主按模块 ID 管理，适合放企业核心算法。作者侧建议在 `src/wasm/*.ts` 写 typed facade，facade 内部调用 `ToolPkg.wasm.call(moduleId, exportName, args)`，业务入口直接导入 facade。
+
+### 7.3 访问资源
 
 **在 UI 模块中**：
 ```javascript
@@ -1075,7 +1336,7 @@ const iconPath = await ToolPkg.readResource('icon');
 ### 8.2 外部包
 
 用户可以通过以下方式导入外部包：
-1. 将 `.toolpkg` 文件复制到设备的 `Android/data/com.ai.assistance.operit/files/packages/` 目录
+1. 将 `.toolpkg` 文件复制到设备的 `Android/data/<applicationId>/files/packages/` 目录，其中 `<applicationId>` 是 `com.ai.assistance.operit.debug` 或 `com.ai.assistance.operit`
 2. 在应用中使用"导入包"功能
 
 ### 8.3 版本管理
@@ -1122,7 +1383,7 @@ my_toolpkg/
 
 - 所有面向用户的文本都应提供多语言版本
 - 至少提供中文（`zh`）和英文（`en`）
-- 使用 `default` 键作为回退
+- 使用 `default` 键作为默认值
 
 ### 9.4 资源优化
 
@@ -1173,7 +1434,7 @@ my_toolpkg/
 
 1. **使用 dry-run 模式**：
    ```bash
-   python sync_example_packages.py --dry-run
+   python tools/example_packages/sync_example_packages.py --dry-run
    ```
 
 2. **查看应用日志**：
@@ -1191,7 +1452,7 @@ my_toolpkg/
 
 ### 10.3 使用调试安装脚本快速烧录到手机
 
-普通 `.js` 包可以直接用 `tools/execute_js.bat` / `tools/execute_js.sh` 临时推送后单次执行；但 `toolpkg` 不适合这样调试。
+普通 `.js` 包可以直接用 `tools/adb/execute_js.bat` / `tools/adb/execute_js.sh` 临时推送后单次执行；但 `toolpkg` 不适合这样调试。
 
 原因是 `toolpkg` 不只是“跑一个函数”，它还涉及：
 
@@ -1199,26 +1460,26 @@ my_toolpkg/
 - 解析 `toolpkg_id`
 - 加载 `main` 脚本里的注册逻辑
 - 同步 UI 模块、消息处理插件、Prompt Hook、Tool Lifecycle Hook 等宿主级注册
-- 刷新 ToolPkg cache 与运行时 hook 映射
+- 刷新 ToolPkg 注册信息
 
 因此，`toolpkg` 调试的正确思路不是“一次运行”，而是“快速重新安装”。
 
 项目现在提供了专门的调试安装脚本：
 
-- Windows：`tools/debug_toolpkg.bat`
-- Linux/macOS：`tools/debug_toolpkg.sh`
-- 共享实现：`tools/debug_toolpkg.py`
+- Windows：`tools/toolpkg/debug_toolpkg.bat`
+- Linux/macOS：`tools/toolpkg/debug_toolpkg.sh`
+- 共享实现：`tools/toolpkg/debug_toolpkg.py`
 
 它们会执行以下流程：
 
 1. 从 ToolPkg 目录或现成 `.toolpkg` 中读取 `manifest`
 2. 解析 `toolpkg_id` 与 `main`
 3. 如果输入是目录，则先临时打包成 `.toolpkg`
-4. 通过 `adb push` 将包推送到手机的 `Android/data/com.ai.assistance.operit/files/packages/`
+4. 通过 `adb push` 将包推送到手机的 `Android/data/<applicationId>/files/packages/`；调试脚本会自动选择已安装的 Debug/Release applicationId
 5. 发送调试广播，让 App 重新扫描外部 packages 目录
 6. 按 `toolpkg_id` 启用该 ToolPkg 容器
 7. 按 manifest 默认值重新应用 subpackage 启用状态（可选关闭）
-8. 刷新 ToolPkg cache、hook/runtime 映射，并尝试重新激活先前已注册过的 subpackage 工具
+8. 刷新 ToolPkg 注册信息，并尝试重新激活先前已注册过的 subpackage 工具
 
 这条链路更接近真实安装行为，适合调试：
 
@@ -1226,6 +1487,8 @@ my_toolpkg/
 - `ToolPkg.registerMessageProcessingPlugin(...)`
 - `ToolPkg.registerXmlRenderPlugin(...)`
 - `ToolPkg.registerInputMenuTogglePlugin(...)`
+- `ToolPkg.registerChatMessageMenuItem(...)`，需要 ToolPkg API `1.0.1`
+- `ToolPkg.registerChatRuntimeHook(...)`，需要 ToolPkg API `1.0.1`
 - `ToolPkg.registerToolLifecycleHook(...)`
 - Prompt 相关 hook
 
@@ -1234,39 +1497,40 @@ my_toolpkg/
 直接传 ToolPkg 目录：
 
 ```bash
-python tools/debug_toolpkg.py examples/windows_control
+python tools/toolpkg/debug_toolpkg.py examples/windows_control
 ```
 
 也可以传 `manifest.json`：
 
 ```bash
-python tools/debug_toolpkg.py examples/windows_control/manifest.json
+python tools/toolpkg/debug_toolpkg.py examples/windows_control/manifest.json
 ```
 
 或者传现成 `.toolpkg`：
 
 ```bash
-python tools/debug_toolpkg.py /path/to/windows_control.toolpkg
+python tools/toolpkg/debug_toolpkg.py /path/to/windows_control.toolpkg
 ```
 
 Windows 下可直接使用：
 
 ```bat
-tools\debug_toolpkg.bat examples\windows_control
-tools\debug_toolpkg.bat examples\windows_control\manifest.json
-tools\debug_toolpkg.bat D:\tmp\windows_control.toolpkg --device emulator-5554
+tools\toolpkg\debug_toolpkg.bat examples\windows_control
+tools\toolpkg\debug_toolpkg.bat examples\windows_control\manifest.json
+tools\toolpkg\debug_toolpkg.bat D:\tmp\windows_control.toolpkg --device emulator-5554
 ```
 
 Linux/macOS 下可直接使用：
 
 ```bash
-bash tools/debug_toolpkg.sh examples/windows_control
-bash tools/debug_toolpkg.sh examples/windows_control/manifest.json
+bash tools/toolpkg/debug_toolpkg.sh examples/windows_control
+bash tools/toolpkg/debug_toolpkg.sh examples/windows_control/manifest.json
 ```
 
 #### 10.3.2 常用参数
 
 - `--device <serial>`：指定 adb 设备；不传时，若只连了一台设备则自动选中
+- `--app-package <applicationId>`：指定 `com.ai.assistance.operit.debug` 或 `com.ai.assistance.operit`；不传时优先选择已安装的 Debug 包，也可以使用环境变量 `OPERIT_APP_PACKAGE`
 - `--no-reset-subpackage-states`：保留本机已有的 subpackage 开关状态，而不是按 manifest 默认值重置
 - `--log-wait-seconds <n>`：发送广播后等待多少秒再抓取日志；默认读取 `OPERIT_LOG_WAIT_SECONDS`，否则为 `6`
 
@@ -1322,7 +1586,7 @@ windows_control/
 
 ```bash
 # 打包 windows_control
-python sync_example_packages.py --include windows_control
+python tools/example_packages/sync_example_packages.py --include windows_control
 
 # 查看打包结果
 ls -lh app/src/main/assets/packages/windows_control.toolpkg
@@ -1331,14 +1595,4 @@ ls -lh app/src/main/assets/packages/windows_control.toolpkg
 ## 12. 参考资料
 
 - [脚本开发指南](./SCRIPT_DEV_GUIDE.md)：了解如何编写子包脚本
-- [PackageManager.kt](../app/src/main/java/com/ai/assistance/operit/core/tools/packTool/PackageManager.kt)：包管理器源码
-- [ToolPkgParser.kt](../app/src/main/java/com/ai/assistance/operit/core/tools/packTool/ToolPkgParser.kt)：解析器源码
-- [JsComposeDslBridge.kt](../app/src/main/java/com/ai/assistance/operit/core/tools/javascript/JsComposeDslBridge.kt)：Compose DSL 桥接
-
-## 13. 更新日志
-
-### v1.0.0 (2024-02-14)
-- 初始版本
-- 支持子包、UI 模块、资源文件
-- 支持多语言
-- 提供 Compose DSL UI 框架
+- [ToolPkg API 文档](./doc-src/package-dev/toolpkg.md)：了解注册 API

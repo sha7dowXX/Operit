@@ -32,7 +32,6 @@ import com.ai.assistance.operit.data.model.ToolResult
 import com.ai.assistance.operit.data.preferences.ActivePromptManager
 import com.ai.assistance.operit.data.model.ActivePrompt
 import com.ai.assistance.operit.data.preferences.CharacterCardManager
-import com.ai.assistance.operit.data.preferences.FunctionalConfigManager
 import com.ai.assistance.operit.data.preferences.PromptTagManager
 import com.ai.assistance.operit.data.preferences.ApiPreferences
 import com.ai.assistance.operit.data.preferences.PersonaCardChatHistoryManager
@@ -139,7 +138,6 @@ private data class CharacterChatMessage(
 @Composable
 fun PersonaCardGenerationScreen(
     onNavigateToSettings: () -> Unit = {},
-    onNavigateToUserPreferences: () -> Unit = {},
     onNavigateToModelConfig: () -> Unit = {},
     onNavigateToModelPrompts: () -> Unit = {}
 ) {
@@ -215,7 +213,6 @@ fun PersonaCardGenerationScreen(
     // 1. 一次性初始化：加载所有卡片和标签，并确定初始活跃卡片ID
     LaunchedEffect(Unit) {
         val initResult = withContext(Dispatchers.IO) {
-            characterCardManager.initializeIfNeeded()
             val cards = characterCardManager.getAllCharacterCards()
             val tags = tagManager.getAllTags()
 
@@ -301,7 +298,6 @@ fun PersonaCardGenerationScreen(
     fun refreshData() {
         scope.launch {
             val result = withContext(Dispatchers.IO) {
-                characterCardManager.initializeIfNeeded()
                 val cards = characterCardManager.getAllCharacterCards()
                 val currentPrompt = activePromptManager.getActivePrompt()
                 var id = when (currentPrompt) {
@@ -368,8 +364,6 @@ fun PersonaCardGenerationScreen(
         val aiService = EnhancedAIService
             .getInstance(context)
             .getAIServiceForFunction(FunctionType.CHAT)
-        val functionalConfigManager = FunctionalConfigManager(context)
-        functionalConfigManager.initializeIfNeeded()
 
         val fullHistory = mutableListOf<Pair<String, String>>()
         if (systemPrompt != null) {
@@ -379,7 +373,7 @@ fun PersonaCardGenerationScreen(
 
         val stream = aiService.sendMessage(
             context = context,
-            chatHistory = (fullHistory + ("user" to prompt)).toPromptTurns()
+            chatHistory = (fullHistory + ("user" to prompt)).toPromptTurns(),
         )
         Pair(stream, aiService)
     }
@@ -514,18 +508,6 @@ fun PersonaCardGenerationScreen(
                             scope.launch { listState.animateScrollToItem(chatMessages.lastIndex) }
                         }
                     }
-                }
-
-                // Update token and request count statistics
-                withContext(Dispatchers.IO) {
-                    val apiPreferences = ApiPreferences.getInstance(context)
-                    apiPreferences.updateTokensForProviderModel(
-                        aiService.providerModel,
-                        aiService.inputTokenCount,
-                        aiService.outputTokenCount,
-                        aiService.cachedInputTokenCount
-                    )
-                    apiPreferences.incrementRequestCountForProviderModel(aiService.providerModel)
                 }
 
                 // 流结束后解析并执行工具

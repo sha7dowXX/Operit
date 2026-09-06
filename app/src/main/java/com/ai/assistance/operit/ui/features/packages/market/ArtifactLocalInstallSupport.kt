@@ -59,7 +59,12 @@ fun PackageManager.getInstalledArtifactSnapshots(
             LocalInstalledArtifactSnapshot(
                 packageName = packageName,
                 // Built-in packages do not always have a stable external source file path.
-                sha256 = if (sourceFile != null && sourceFile.exists() && sourceFile.isFile) sha256Hex(sourceFile) else "",
+                sha256 =
+                    if (sourceFile != null && sourceFile.exists() && sourceFile.isFile) {
+                        sha256Hex(sourceFile)
+                    } else {
+                        ""
+                    },
                 isBuiltIn = toolPackage.isBuiltIn
             )
         }
@@ -180,8 +185,8 @@ suspend fun installArtifactProjectVersion(
             withContext(Dispatchers.IO) {
                 packageManager.addPackageFileFromExternalStorage(tempFile.absolutePath)
             }
-        if (!importResult.startsWith("Successfully imported", ignoreCase = true)) {
-            throw IllegalStateException(importResult)
+        if (!importResult.message.startsWith("Successfully imported", ignoreCase = true)) {
+            throw IllegalStateException(importResult.message)
         }
     } finally {
         if (tempFile.exists()) {

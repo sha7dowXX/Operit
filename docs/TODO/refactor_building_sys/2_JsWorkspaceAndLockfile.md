@@ -17,9 +17,9 @@ last_reviewed: 2026-07-14
 ## 旧实现情况
 
 - 根项目和 `web-chat` 的构建入口使用 npm
-- `sync_example_packages.py` 已直接调用 pnpm，仓库同时存在两套包管理入口
+- `tools/example_packages/sync_example_packages.py` 已直接调用 pnpm，仓库同时存在两套包管理入口
 - `pnpm-workspace.yaml` 没有 packages 列表
-- `.gitignore` 忽略 `pnpm-lock.yaml` 和 `package-lock.json`
+- 原仓库忽略 `pnpm-lock.yaml` 和 `package-lock.json`；PR 门禁重构已暂时提交三个 npm lockfile 供 `npm ci` 使用
 - `tools/mcp_bridge` 使用 npm 串联自己的 build、bundle 和 copy 脚本
 
 ## 预期的新实现情况
@@ -41,7 +41,7 @@ last_reviewed: 2026-07-14
 - `web-chat/package.json`
 - `tools/mcp_bridge/package.json`
 - `examples/github/package.json`
-- `sync_example_packages.py`
+- `tools/example_packages/sync_example_packages.py`
 
 本步骤不修改：
 
@@ -68,4 +68,4 @@ last_reviewed: 2026-07-14
 
 ## 完成记录
 
-状态：未开始。完成前需要记录冻结安装与包构建验证结果。
+状态：部分准备。PR 门禁已使用 npm lockfile 冻结当前安装；迁移到唯一 pnpm workspace lockfile 尚未开始，完成前仍需记录冻结安装与包构建验证结果。

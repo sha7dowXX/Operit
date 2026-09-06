@@ -67,6 +67,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.ai.assistance.operit.R
+import com.ai.assistance.operit.data.model.ChatHistory
 import com.ai.assistance.operit.data.model.ImportStrategy
 import com.ai.assistance.operit.data.model.MemorySpace
 import com.ai.assistance.operit.data.backup.OperitBackupDirs
@@ -84,6 +85,7 @@ import com.ai.assistance.operit.data.converter.ExportFormat
 import com.ai.assistance.operit.data.converter.ChatFormat
 import com.ai.assistance.operit.ui.features.settings.components.BackupFilesStatisticsCard
 import com.ai.assistance.operit.ui.features.settings.components.CharacterCardManagementCard
+import com.ai.assistance.operit.ui.features.settings.components.ChatHistoryExportSelectionDialog
 import com.ai.assistance.operit.ui.features.settings.components.ChatHistoryOperation
 import com.ai.assistance.operit.ui.features.settings.components.DataManagementCard
 import com.ai.assistance.operit.ui.features.settings.components.DeleteConfirmationDialog
@@ -134,7 +136,6 @@ enum class RawSnapshotOperation {
     BACKING_UP,
     BACKUP_SUCCESS,
     RESTORING,
-    RESTORE_SUCCESS,
     FAILED
 }
 
@@ -152,12 +153,17 @@ fun ChatBackupSettingsScreen() {
     var memoryRepo by remember { mutableStateOf<MemoryRepository?>(null) }
 
     var totalChatCount by remember { mutableStateOf(0) }
+    var chatHistories by remember { mutableStateOf<List<ChatHistory>>(emptyList()) }
     var totalCharacterCardCount by remember { mutableStateOf(0) }
     var totalMemoryCount by remember { mutableStateOf(0) }
     var totalMemoryLinkCount by remember { mutableStateOf(0) }
     var totalModelConfigCount by remember { mutableStateOf(0) }
     var operationState by remember { mutableStateOf(ChatHistoryOperation.IDLE) }
     var operationMessage by remember { mutableStateOf("") }
+    var isLongTextExport by remember { mutableStateOf(false) }
+    var longTextExportProgress by remember { mutableStateOf(0f) }
+    var longTextExportProcessedCharacters by remember { mutableStateOf(0L) }
+    var longTextExportTotalCharacters by remember { mutableStateOf(0L) }
     var characterCardOperationState by remember { mutableStateOf(CharacterCardOperation.IDLE) }
     var characterCardOperationMessage by remember { mutableStateOf("") }
     var memoryOperationState by remember { mutableStateOf(MemoryOperation.IDLE) }
@@ -172,7 +178,6 @@ fun ChatBackupSettingsScreen() {
     var rawSnapshotOperationMessage by remember { mutableStateOf("") }
     var pendingRawSnapshotRestoreUri by remember { mutableStateOf<Uri?>(null) }
     var showRawSnapshotRestoreConfirmDialog by remember { mutableStateOf(false) }
-    var showRawSnapshotRestoreRestartDialog by remember { mutableStateOf(false) }
     var showDeleteConfirmDialog by remember { mutableStateOf(false) }
     var showMemoryImportStrategyDialog by remember { mutableStateOf(false) }
     var pendingMemoryImportUri by remember { mutableStateOf<Uri?>(null) }
@@ -210,6 +215,8 @@ fun ChatBackupSettingsScreen() {
     var showImportProfileDialog by remember { mutableStateOf(false) }
 
     // 导出格式选择
+    var showChatExportSelectionDialog by remember { mutableStateOf(false) }
+    var selectedExportChatIds by remember { mutableStateOf<Set<String>>(emptySet()) }
     var showExportFormatDialog by remember { mutableStateOf(false) }
     var selectedExportFormat by remember { mutableStateOf(ExportFormat.JSON) }
 
@@ -236,8 +243,10 @@ fun ChatBackupSettingsScreen() {
     }
 
     LaunchedEffect(Unit) {
-        chatHistoryManager.chatHistoriesFlow.collect { chatHistories ->
-            totalChatCount = chatHistories.size
+        chatHistoryManager.chatHistoriesFlow.collect { histories ->
+            totalChatCount = histories.size
+            chatHistories = histories
+            selectedExportChatIds = selectedExportChatIds.intersect(histories.map { it.id }.toSet())
         }
     }
 
@@ -284,8 +293,10 @@ fun ChatBackupSettingsScreen() {
                 val roomDbFiles = mergedFiles(OperitBackupDirs.roomDbDir())
 
                 chatBackupFileCount = chatFiles.count { file ->
-                    file.name.startsWith("chat_backup_") && file.extension == "json" ||
-                        file.name.startsWith("chat_export_") && file.extension in listOf("json", "md", "html", "txt")
+                    (file.name.startsWith("chat_backup_") &&
+                        file.extension in listOf("json", "zip", "html", "txt", "csv")) ||
+                        (file.name.startsWith("chat_export_") &&
+                            file.extension in listOf("json", "md", "html", "txt", "csv", "zip"))
                 }
 
                 characterCardBackupFileCount = characterCardFiles.count { file ->
@@ -510,8 +521,10 @@ fun ChatBackupSettingsScreen() {
                             val roomDbFiles = mergedFiles(OperitBackupDirs.roomDbDir())
 
                             chatBackupFileCount = chatFiles.count { file ->
-                                file.name.startsWith("chat_backup_") && file.extension == "json" ||
-                                    file.name.startsWith("chat_export_") && file.extension in listOf("json", "md", "html", "txt")
+                                (file.name.startsWith("chat_backup_") &&
+                                    file.extension in listOf("json", "zip", "html", "txt", "csv")) ||
+                                    (file.name.startsWith("chat_export_") &&
+                                        file.extension in listOf("json", "md", "html", "txt", "csv", "zip"))
                             }
 
                             characterCardBackupFileCount = characterCardFiles.count { file ->
@@ -545,9 +558,13 @@ fun ChatBackupSettingsScreen() {
                 totalChatCount = totalChatCount,
                 operationState = operationState,
                 operationMessage = operationMessage,
+                isLongTextExport = isLongTextExport,
+                longTextExportProgress = longTextExportProgress,
+                longTextExportProcessedCharacters = longTextExportProcessedCharacters,
+                longTextExportTotalCharacters = longTextExportTotalCharacters,
                 onExport = {
-                    // 显示格式选择对话框
-                    showExportFormatDialog = true
+                    selectedExportChatIds = emptySet()
+                    showChatExportSelectionDialog = true
                 },
                 onImport = {
                     val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
@@ -1054,12 +1071,6 @@ fun ChatBackupSettingsScreen() {
                                         message = rawSnapshotOperationMessage,
                                         icon = Icons.Default.CloudDownload
                                     )
-                                RawSnapshotOperation.RESTORE_SUCCESS ->
-                                    OperationResultCard(
-                                        title = stringResource(R.string.backup_import_success),
-                                        message = rawSnapshotOperationMessage,
-                                        icon = Icons.Default.Restore
-                                    )
                                 RawSnapshotOperation.FAILED ->
                                     OperationResultCard(
                                         title = stringResource(R.string.backup_operation_failed),
@@ -1227,6 +1238,22 @@ fun ChatBackupSettingsScreen() {
         )
     }
 
+    if (showChatExportSelectionDialog) {
+        ChatHistoryExportSelectionDialog(
+            chatHistories = chatHistories,
+            selectedChatIds = selectedExportChatIds,
+            onSelectionChanged = { selectedExportChatIds = it },
+            onDismiss = {
+                showChatExportSelectionDialog = false
+                selectedExportChatIds = emptySet()
+            },
+            onConfirm = {
+                showChatExportSelectionDialog = false
+                showExportFormatDialog = true
+            },
+        )
+    }
+
     if (showExportFormatDialog) {
         ExportFormatDialog(
             selectedFormat = selectedExportFormat,
@@ -1236,23 +1263,35 @@ fun ChatBackupSettingsScreen() {
                 showExportFormatDialog = false
                 scope.launch {
                     operationState = ChatHistoryOperation.EXPORTING
+                    isLongTextExport = false
+                    longTextExportProgress = 0f
+                    longTextExportProcessedCharacters = 0L
+                    longTextExportTotalCharacters = 0L
                     try {
-                        val filePath = chatHistoryManager.exportChatHistoriesToDownloads(selectedExportFormat)
-                        if (filePath != null) {
+                        val exportResult = chatHistoryManager.exportChatHistoriesToDownloads(
+                            selectedChatIds = selectedExportChatIds,
+                            format = selectedExportFormat,
+                            onProgress = { progress ->
+                                isLongTextExport = progress.isLongText
+                                longTextExportProgress = progress.progress
+                                longTextExportProcessedCharacters = progress.processedCharacters
+                                longTextExportTotalCharacters = progress.totalCharacters
+                            },
+                        )
+                        if (exportResult != null) {
                             operationState = ChatHistoryOperation.EXPORTED
-                            val chatCount = chatHistoryManager.chatHistoriesFlow.first().size
                             val formatName = when (selectedExportFormat) {
                                 ExportFormat.JSON -> context.getString(R.string.backup_format_json)
                                 ExportFormat.MARKDOWN -> context.getString(R.string.backup_format_markdown)
                                 ExportFormat.HTML -> context.getString(R.string.backup_format_html)
                                 ExportFormat.TXT -> context.getString(R.string.backup_format_txt)
-                                ExportFormat.CSV -> "CSV"
+                                ExportFormat.CSV -> context.getString(R.string.backup_format_csv)
                             }
                             operationMessage = context.getString(
                                 R.string.backup_chat_export_result_success,
-                                chatCount,
+                                exportResult.chatCount,
                                 formatName,
-                                filePath
+                                exportResult.filePath
                             )
                         } else {
                             operationState = ChatHistoryOperation.FAILED
@@ -1479,9 +1518,13 @@ fun ChatBackupSettingsScreen() {
                                             }
                                         }
                                     )
-                                    rawSnapshotOperationState = RawSnapshotOperation.RESTORE_SUCCESS
-                                    rawSnapshotOperationMessage = targetName
-                                    showRawSnapshotRestoreRestartDialog = true
+                                    // The open process may retain stale DataStore state. Do not
+                                    // allow it to keep running after raw files have been replaced.
+                                    val intent = Intent(context, MainActivity::class.java).apply {
+                                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+                                    }
+                                    context.startActivity(intent)
+                                    exitProcess(0)
                                 } catch (e: Exception) {
                                     rawSnapshotOperationState = RawSnapshotOperation.FAILED
                                     rawSnapshotOperationMessage = e.localizedMessage ?: e.toString()
@@ -1533,32 +1576,6 @@ fun ChatBackupSettingsScreen() {
         )
     }
 
-    if (showRawSnapshotRestoreRestartDialog) {
-        AlertDialog(
-            onDismissRequest = { showRawSnapshotRestoreRestartDialog = false },
-            title = { Text(stringResource(R.string.backup_raw_snapshot_restart_title)) },
-            text = { Text(stringResource(R.string.backup_raw_snapshot_restart_message)) },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        showRawSnapshotRestoreRestartDialog = false
-                        val intent = Intent(context, MainActivity::class.java).apply {
-                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
-                        }
-                        context.startActivity(intent)
-                        exitProcess(0)
-                    }
-                ) {
-                    Text(stringResource(R.string.backup_raw_snapshot_restart_now))
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showRawSnapshotRestoreRestartDialog = false }) {
-                    Text(stringResource(R.string.backup_raw_snapshot_restart_later))
-                }
-            }
-        )
-    }
 }
 
 private data class DeleteAllChatsResult(
@@ -1630,4 +1647,3 @@ private suspend fun importMemoriesFromUri(
 
     memoryRepository.importMemoriesFromJson(jsonString, strategy)
 }
-

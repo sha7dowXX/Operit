@@ -216,6 +216,12 @@
     <string name="workflow_execution_log_node_title">节点日志：%1$s</string>
     <string name="workflow_execution_log_empty">暂无执行日志</string>
     <string name="workflow_execution_log_empty_for_node">该节点暂无执行日志：%1$s</string>
+    <string name="workflow_execution_log_failure_stage">失败阶段：%1$s</string>
+    <string name="workflow_execution_log_failure_reason">异常原文：%1$s</string>
+    <string name="workflow_execution_failure_stage_startup">工作流启动</string>
+    <string name="workflow_execution_failure_stage_runtime_initialization">运行环境初始化</string>
+    <string name="workflow_execution_failure_stage_execution">工作流执行</string>
+    <string name="workflow_execution_failure_stage_cancellation">执行取消</string>
     <string name="workflow_edit_dialog_title">编辑工作流</string>
     <string name="workflow_enabled_label">启用工作流</string>
     <string name="workflow_disabled">已禁用</string>
@@ -745,6 +751,15 @@
     <string name="theme_bg_opacity">背景不透明度: %1$d%%</string>
     <string name="theme_reset">重置为默认主题</string>
     <string name="theme_saved">设置已保存</string>
+    <string name="theme_select_target">选择主题对象</string>
+    <string name="theme_unsaved_title">保存主题修改？</string>
+    <string name="theme_unsaved_message">当前主题对象的修改尚未保存。</string>
+    <string name="theme_save_failed">主题保存失败</string>
+    <string name="theme_save_and_continue">保存并继续</string>
+    <string name="theme_discard_and_continue">不保存</string>
+    <string name="theme_edit_target_character">当前角色主题</string>
+    <string name="theme_edit_target_group">当前角色群聊主题</string>
+    <string name="theme_target_switch_failed">切换主题对象失败</string>
     <string name="theme_video_too_large">视频文件过大，可能导致应用卡顿或崩溃。请选择小于30MB的视频。</string>
     <string name="theme_video_saved">背景视频已保存</string>
     <string name="theme_image_saved">背景图片已保存</string>
@@ -848,8 +863,8 @@
     
     <!-- Settings Screen Sections -->
     <string name="settings_section_personalization">个性化</string>
-    <string name="settings_user_preferences">用户偏好设置</string>
-    <string name="settings_user_preferences_desc">编辑会作为用户上下文发送给 AI 的 user.md</string>
+    <string name="settings_user_preferences">用户资料设置</string>
+    <string name="settings_user_preferences_desc">管理用户资料和关联记忆库</string>
     <string name="settings_configure_preferences">配置用户偏好</string>
     <string name="settings_model_prompts">模型提示词设置</string>
     <string name="settings_model_prompts_desc">自定义AI助手的系统提示词，包括自我介绍和语气风格，使AI更符合您的预期</string>
@@ -963,19 +978,29 @@
     <!-- 用户偏好 -->
     <string name="user_preferences_guide">个性化设置</string>
     <string name="user_preferences">用户偏好设置</string>
-    <string name="user_preferences_settings">用户资料（user.md）</string>
-    <string name="user_md_description">唯一的用户资料文件。这里的 Markdown 会在启用时作为用户上下文发送给 AI。</string>
+    <string name="user_preferences_settings">用户资料设置</string>
+    <string name="user_md_description">当前用户配置的 user.md 会作为用户上下文发送给 AI。</string>
     <string name="user_md_edit_tab">编辑</string>
     <string name="user_md_preview_tab">预览</string>
-    <string name="user_md_reset">清空文档</string>
     <string name="user_md_legacy_archive">旧档案</string>
     <string name="user_md_unsaved_title">放弃未保存的修改？</string>
     <string name="user_md_unsaved_message">返回后，本次对 user.md 的修改将丢失。</string>
     <string name="user_md_discard">放弃修改</string>
-    <string name="user_md_reset_title">清空 user.md？</string>
-    <string name="user_md_reset_message">当前草稿会被替换为空白文档，保存后生效。</string>
     <string name="user_md_editor_placeholder">介绍你的背景、习惯，以及希望 AI 如何与你交流…</string>
     <string name="user_md_preview_empty">user.md 目前为空，填写内容后可在这里预览。</string>
+    <string name="user_configuration_select">选择用户配置</string>
+    <string name="user_configuration_active">当前活动配置</string>
+    <string name="user_configuration_policy">自动更新与锁定</string>
+    <string name="user_configuration_open_memory">打开关联记忆库</string>
+    <string name="user_configuration_create">新建用户配置</string>
+    <string name="user_configuration_rename">重命名用户配置</string>
+    <string name="user_configuration_delete">删除用户配置</string>
+    <string name="user_configuration_name">用户配置名称</string>
+    <string name="user_configuration_delete_warning">确定删除用户配置“%1$s”及其关联的全部记忆吗？此操作无法撤销。</string>
+    <string name="user_configuration_auto_update">自动更新资料</string>
+    <string name="user_configuration_lock">锁定资料自动更新</string>
+    <string name="user_configuration_auto_update_desc">启用后，长期记忆分析会根据该配置关联空间的对话更新 user.md。锁定只阻止自动更新，手动编辑仍然可用。</string>
+    <string name="user_configuration_unlock_notice">该配置由旧版锁定设置迁移而来，保存后会解除整份资料锁定。</string>
     <string name="custom_description">自定义介绍</string>
     <string name="preferences_hint">请输入您的个人介绍（最多100字）</string>
     <string name="enter_preferences">在此输入您的个人介绍...</string>
@@ -1045,9 +1070,14 @@
     <string name="plugin_enable_failed">插件启用失败</string>
     <string name="plugin_disable_failed">插件禁用失败</string>
     <string name="plugin_subpackage_count">子包数：%1$d</string>
+    <string name="pkg_toolpkg_api_version">ToolPkg API：%1$s</string>
+    <string name="toolpkg_api_version_label">ToolPkg API 版本</string>
+    <string name="toolpkg_api_version_value">ToolPkg API 版本：%1$s</string>
+    <string name="pkg_toolpkg_requires">依赖包：%1$s</string>
     <string name="pkg_toolpkg_subpackages">ToolPkg 子包</string>
     <string name="pkg_toolpkg_version">版本：%1$s</string>
     <string name="pkg_toolpkg_resources">资源数：%1$d</string>
+    <string name="pkg_toolpkg_wasm_modules">WASM 模块数：%1$d</string>
     <string name="pkg_toolpkg_ui_modules">UI 模块数：%1$d</string>
     <string name="pkg_toolpkg_workflow_templates">工作流模板数：%1$d</string>
     <string name="pkg_toolpkg_workspace_templates">工作区模板数：%1$d</string>
@@ -1060,6 +1090,8 @@
     <string name="automation_json_only">仅支持JSON文件</string>
     <string name="no_filename">无法获取文件名</string>
     <string name="external_package_imported">外部包已导入</string>
+    <string name="package_market_origin_title">外部包来源提示</string>
+    <string name="package_market_origin_message">该包来自 Operit 市场。\n包名：%1$s\n版本：%2$s\n作者：%3$s\n请支持原作者，并警惕二次转售。</string>
     <string name="current_tab_not_support_import">当前标签页不支持导入</string>
     <string name="import_failed">导入失败: %1$s</string>
     <string name="package_import_failed">包导入失败</string>
@@ -1095,23 +1127,27 @@
     <!-- 用户协议界面 -->
     <string name="agreement_title">用户协议与隐私政策</string>
     <string name="agreement_subtitle">请在使用前仔细阅读并同意以下条款。</string>
+    <string name="agreement_version">协议版本：%1$s</string>
     <string name="agreement_human_readable_title">人话版协议（非法律版本）</string>
-    <string name="agreement_human_readable_content">我们和你一样，不喜欢冗长乏味的协议。简单来说：\n\nOperitAI是一款免费的开源软件。它的自动化等功能很强大，请务必仅用于个人学习和日常辅助，不要用于任何商业或违规用途。\n\n您需要对自己的所有行为负责。对于您自行添加的扩展或修改的软件，我们也不承担责任。\n\n隐私方面：您的语音处理都在手机本地完成，很安全。AI聊天数据会直接发给AI公司，我们不经手。</string>
+    <string name="agreement_human_readable_content">服务边界说明：Operit 不提供面向公众的拟人化情感互动服务。Operit 是在用户设备本地运行的开源客户端，不运营模型推理服务、不托管聊天会话或交互数据，也不向用户分发共享模型凭据。云模型请求由用户使用自行配置的凭据从设备直接发送至所选模型服务商，相关数据适用该服务商的规则；本地模型在设备内推理。\n\n本应用可以调用文件、终端、自动化、Root、ADB 和扩展等能力。请在操作前核对内容、备份重要数据并谨慎授予权限；因用户操作、用户配置、第三方服务或第三方扩展造成的设备、数据、账号或其他损失，应由实际操作人依适用法律处理。\n\n插件市场中的第三方插件、脚本、Skill、工具包和其他内容，其著作权及相关责任归标注的作者或权利人所有。市场展示或安装不表示 Operit 对该内容作出保证、背书或取得其权利。使用、修改、发布或再分发前，请自行确认许可和权利状态。</string>
     <string name="agreement_serious_title">严谨版法律协议</string>
     <string name="agreement_serious_content"><![CDATA[
-        <p>欢迎使用 OperitAI。本软件是根据 GNU 宽通用公共许可证第三版（LGPLv3）的条款进行修改和分发的。</p>
-        <p><b>1. 无担保声明</b><br>本软件按"原样"提供，不附带任何形式的明示或暗示的保证，包括但不限于对适销性、特定用途适用性或不侵权的保证。所有与软件质量和性能相关的风险均由您承担。</p>
-        <p><b>2. 责任限制</b><br>在任何情况下，除非适用法律要求或书面同意，否则任何贡献者均不对因使用或无法使用本软件而造成的任何直接、间接、偶然、特殊、惩戒性或后果性损害（包括但不限于采购替代商品或服务、数据或利润损失、或业务中断）承担责任。<b>此外，开发团队不对用户自行安装的任何扩展包（如MCP）或对本软件进行修改后产生的任何后果负责。</b></p>
-        <p><b>3. 用户责任与使用限制</b><br>您对通过本软件进行的任何操作及所有后果负全部责任。您承诺将本软件用于合法且正当的个人用途，并同意：<br>
-        a. 本软件包含的自动化功能，仅限于个人学习、研究和日常辅助用途。<br>
-        b. <b>严禁将本软件及其功能用于任何形式的商业、盈利性活动或可能对第三方服务造成不当影响的大规模自动化操作。</b><br>
-        c. 对于您因使用本软件而对第三方造成的任何损害，您将自行承担赔偿责任。社区保留对滥用行为进行追究的权利。</p>
-        <p><b>4. 隐私保护</b><br>我们尊重并保护所有使用服务用户的个人隐私权。我们承诺：<br>a. <b>本地处理：</b>本应用的语音识别与语音合成功能完全在您的设备本地运行，相关数据不会被上传至任何云端服务器。<br>b. <b>第三方AI服务：</b>本应用使用的AI对话服务由第三方大型模型提供商（如DeepSeek等）支持。当您使用此功能时，您的对话数据将直接发送至相应的服务商，不会经过我们的服务器中转或存储。我们建议您同时查阅并了解对应AI服务商的隐私政策。<br>c. <b>数据安全：</b>除上述情况外，我们不会主动收集或存储您的任何个人信息，并会采取合理的数据安全措施保护应用运行所必需的本地数据。</p>
-        <p><b>5. 协议修改</b><br>我们有权在必要时修改本协议条款。您可以在应用内查阅最新版本的协议条款。若您继续使用本服务，则视为您已接受修改后的协议。</p>
+        <p><b>Operit 用户协议与隐私政策</b><br>版本：2026-07-15；拟生效日期：2026 年 7 月 15 日。</p>
+        <p><b>1. 适用范围与协议版本</b><br>本协议适用于 Operit 官方发布的 Android 客户端及其可选在线功能。使用本应用即表示您已阅读并同意当前版本。本应用在启动时记录您确认的协议版本；协议发生实质更新时，应用将要求您重新确认后方可继续使用。仓库中的开源代码许可由根目录 <code>LICENSE</code> 所载 GNU 宽通用公共许可证第三版（LGPLv3）规定；本协议不排除或缩减适用法律及开源许可证赋予您的权利。</p>
+        <p><b>2. 产品定位与第三方服务</b><br>Operit 是开源客户端软件，不提供大语言模型推理、共享 API Key、聊天请求中转或聊天记录云端托管。云模型、云端语音、搜索、绘图、MCP 及其他网络功能由您自行选择、配置和启用。您使用该等服务时，数据将直接发送给相应服务商，并受其服务条款和隐私政策约束。您应自行判断服务商、模型、端点和扩展的安全性、合法性与适用性，并妥善保管相关凭据。</p>
+        <p><b>3. 数据处理与隐私</b><br>聊天记录、角色卡、记忆、模型配置和 API Key 通常存储在设备的应用数据中。您主动导出、备份、上传文件、使用第三方网络功能或向外部 HTTP 服务提交请求时，相关数据将依您的操作被复制、传输或披露。市场、公告、更新检查、GitHub 登录和发布功能会访问 Operit、GitHub 或相关第三方资源；这些功能不转发聊天模型请求。请结合设备安全设置、第三方服务条款及本协议管理您的数据和凭据。</p>
+        <p><b>4. 对外部署与运营责任</b><br>外部 HTTP 服务、QQ Bot、自动回复及类似能力由您选择启用。您将其开放给他人或公众使用时，应作为实际部署或运营者负责访问控制、用户授权、内容安全、数据保护、未成年人保护、必要的提示和其他适用义务。面向中国境内公众持续提供模拟自然人人格特征、思维模式或沟通风格的情感互动服务时，您应自行评估并遵守《人工智能拟人化互动服务管理暂行办法》及其他适用规定。您不得利用本应用提供虚拟亲属、虚拟伴侣等面向未成年人的虚拟亲密关系服务，不得诱导情感依赖或沉迷、实施情感操纵，或从事其他侵害他人合法权益的活动。</p>
+        <p><b>5. 合法使用与内容责任</b><br>您应遵守适用法律法规、第三方服务规则及平台规则，不得利用本应用、扩展或配置实施违法活动、侵害他人权益、未经授权访问系统或数据，或传播违法有害内容。您对自行输入、配置、生成、发布、转发或运营的内容和行为负责。AI 输出可能存在错误、遗漏或偏差，不构成医疗、心理危机、法律、金融或其他专业建议；紧急危险情形请及时联系当地紧急服务、医疗机构或可信赖的人。</p>
+        <p><b>6. 软件按现状提供</b><br>在适用法律允许的范围内，本软件按“现状”和“可用”状态提供。贡献者不对软件或第三方服务的持续可用性、准确性、安全性、适销性、特定用途适用性或不侵权作出明示或默示保证。因使用本软件、第三方服务、扩展、用户配置或自行修改造成的损失，应依适用法律和相应服务协议处理。</p>
+        <p><b>7. 协议更新与联系</b><br>我们可能因功能、法律或安全要求更新本协议，并在应用内提供当前版本。对用户权益有实质影响的更新，将通过提高协议版本并要求重新确认的方式生效。您可通过项目仓库、应用内反馈入口或公开联系渠道提出问题和意见。</p>
     ]]></string>
-    <string name="agreement_disclaimer">若"人话版"与"严谨版"协议存在任何不一致或冲突，一切以中文"严谨版"为准。我们保留对本协议的最终解释权。</string>
+    <string name="agreement_disclaimer">人话版仅为便于理解；若与中文严谨版不一致，以中文严谨版为准。</string>
     <string name="agreement_accept">我已阅读并同意</string>
     <string name="agreement_wait">请稍候... (%1$d)</string>
+    <string name="market_agreement_title">插件市场使用协议与行为规范</string>
+    <string name="market_agreement_subtitle">进入插件市场前，请阅读并同意本协议。市场用于分享和发现插件，我们推荐作者通过公开 GitHub 仓库直接开源。</string>
+    <string name="market_agreement_version">市场协议版本：%1$s</string>
+    <string name="market_agreement_content">1. 市场定位。Operit 插件市场仅用于分享、发现和索引脚本、工具包、Skill、MCP 及其他扩展，并提供市场内的浏览、下载和安装入口。市场不是插件作者、买方、卖方、经纪方、收费方、担保方或权利登记机构；市场展示、收录、排序或推荐某个插件，不表示该插件由 Operit 开发、拥有、代理或背书。\n\n2. 发布授权。发布者提交插件到市场，即授予 Operit 一项非独占、非转让、仅为运营市场所必要的许可，用于保存、缓存、复制、处理、展示、索引市场条目，并向市场用户提供该插件的下载和安装。发布行为同时表示发布者允许市场用户通过市场下载、安装并在插件设计用途范围内正常使用，但不当然允许修改或再分发。该许可不转移插件的著作权、所有权或其他权利，市场不得据此取得插件在市场之外的自由再许可权。发布者应确保自己有权作出上述授权。\n\n3. GitHub 开源建议。我们推荐发布者在自己控制的公开 GitHub 仓库直接发布源代码、README、许可证、版本或 Release 和变更记录，并从该仓库向市场登记来源。GitHub 仓库公开可见不等于自动授予开源许可；是否允许使用、修改和再分发，以作者明确声明的开源许可证或其他书面授权为准。\n\n4. 用户使用和再分发。插件的再分发权原则上由作者或其他权利人保留。前述下载、安装和正常使用权限，不等于向每一名用户授予再次上传、转发、改包、出售或重新发布插件的权利。除法律另有规定外，用户只能按照作者声明的许可证或授权修改和再分发；未声明允许再分发的插件，不得自行再分发。开源插件的权利范围以其开源许可证为准。\n\n5. 第三方风险和安全责任。插件具有独立的代码、配置和运行权限，可能执行代码、启动本地服务、访问文件、读取环境变量或连接网络。用户应自行审查并承担启用、安装和使用插件的风险。发布者不得在插件、仓库、示例或配置中提交 API Key、Cookie、Token、私钥、账号密码或用户数据，并应如实说明作者、许可证、权限、联网行为、环境变量、外部服务和已知风险。Operit 不对第三方扩展的安全性、准确性、可用性、合法性或兼容性作保证。\n\n6. 评论和社区行为。评论内容应与插件功能、使用体验、缺陷或安全问题相关。不得发布 QQ、Telegram、Discord 等群号、联系方式、广告、导流信息、交易信息、无关链接或其他可能扰乱社区秩序的内容；不得公开 API Key、Cookie、Token、私钥、账号密码或其他个人数据。\n\n7. 禁止交易和导流。不得在市场内买卖、倒卖、代装插件，不得通过收款、打赏、会员、私聊或第三方链接诱导他人为免费插件付费。市场不提供支付、履约、退款或交易纠纷处理服务。免费插件无需向任何人付费；第三方渠道的收费、授权或承诺不代表 Operit 官方认可。\n\n8. 市场服务边界。为提供分享、下载和安装服务，市场可能保存、缓存或传输市场条目和插件文件，但不承诺永久托管、备份、保密或防复制。发布到市场意味着作者授权市场按本协议向市场用户提供下载和安装，不意味着公众自动获得再分发权。插件是否可访问、下载和继续可用，还取决于作者仓库、GitHub 及其他第三方服务。\n\n9. 规范执行与协议更新。违反本规范的评论、条目或账号可能被限制、隐藏或移除。市场协议因功能、法律或安全要求发生实质变化时，将提高协议版本；用户再次进入市场时需要重新阅读并确认。</string>
     
     <!-- Sherpa -->
     <string name="sherpa_k2_ncnn_init_failed">实时语音识别引擎初始化失败</string>
@@ -1400,7 +1436,7 @@
     <string name="total_tokens">总计: %1$s</string>
     <string name="input_tokens">累计入: %1$s</string>
     <string name="output_tokens">累计出: %1$s</string>
-    <string name="context_window">请求: %1$s</string>
+    <string name="context_window">上下文: %1$s</string>
     <string name="auto_approve">自动批准:</string>
     <string name="auto_approve_desc">用于控制 AI 工具调用时的全局默认策略：开启后，默认直接执行所有工具调用而不再弹出确认；你在“设置 - 工具权限管理”中为单个工具设置的例外规则仍然会优先生效。关闭后，默认对所有工具调用都弹出确认。</string>
     <string name="enabled">已开启</string>
@@ -1429,6 +1465,38 @@
     <string name="title_activity_crash_report">Application Error</string>
     <string name="title_activity_data_recovery">数据救援</string>
     <string name="shortcut_data_recovery">数据救援</string>
+    <string name="data_recovery_raw_snapshot_section">原始快照</string>
+    <string name="data_recovery_raw_snapshot_description">导出会打包内部 files、shared_prefs、datastore、databases 和 Android/data 包目录；导入会覆盖当前数据。</string>
+    <string name="data_recovery_export_snapshot">导出快照</string>
+    <string name="data_recovery_import_snapshot">导入快照</string>
+    <string name="data_recovery_start_main_app">启动主应用</string>
+    <string name="data_recovery_file_management">文件管理</string>
+    <string name="data_recovery_file_management_description">此页不直接打开文件管理器。需要手动查看或导出内部文件时，可以打开 MT 管理器，添加「本地存储仓库」，选择 Operit 的数据仓库后再管理。provider: %1$s</string>
+    <string name="data_recovery_sql_executor">SQL 执行器</string>
+    <string name="data_recovery_messages_size">messages 大小</string>
+    <string name="data_recovery_variants_size">variants 大小</string>
+    <string name="data_recovery_chats_fields">chats 字段</string>
+    <string name="data_recovery_sql_label">SQL</string>
+    <string name="data_recovery_execute">执行</string>
+    <string name="data_recovery_import_snapshot_title">导入原始快照</string>
+    <string name="data_recovery_import_snapshot_message">导入会覆盖当前应用数据。确认导入这个快照？</string>
+    <string name="data_recovery_import_action">导入</string>
+    <string name="data_recovery_cancel_action">取消</string>
+    <string name="data_recovery_started">救援进程已启动</string>
+    <string name="data_recovery_affected_rows">受影响行数：%1$d</string>
+    <string name="data_recovery_query_result">查询结果 %1$d 行</string>
+    <string name="data_recovery_sql_empty">SQL 为空</string>
+    <string name="data_recovery_sql_running">正在执行 SQL</string>
+    <string name="data_recovery_query_completed">查询完成：%1$d 行</string>
+    <string name="data_recovery_sql_completed">SQL 执行完成</string>
+    <string name="data_recovery_export_running">正在导出原始快照</string>
+    <string name="data_recovery_export_completed">原始快照导出完成</string>
+    <string name="data_recovery_restore_running">正在导入原始快照</string>
+    <string name="data_recovery_restore_completed">原始快照导入完成，请重启应用</string>
+    <string name="data_recovery_export_progress">导出：%1$s</string>
+    <string name="data_recovery_restore_progress">导入：%1$s</string>
+    <string name="data_recovery_progress_percent"> %1$d%%</string>
+    <string name="data_recovery_launch_failed">无法启动主应用</string>
 
     <!-- Crash Report Screen -->
     <string name="crash_report_header">应用遇到了一个无法恢复的错误，需要重启。</string>
@@ -1599,6 +1667,11 @@
 
     <!-- Context Menu -->
     <string name="copy_message">复制消息</string>
+    <string name="markdown_source">Markdown 源码</string>
+    <string name="xml_source">XML 源码</string>
+    <string name="copy_plain_text">复制纯文本</string>
+    <string name="copy_markdown_source">复制 Markdown 源码</string>
+    <string name="copy_xml_source">复制 XML 源码</string>
     <string name="chat_hidden_user_message_placeholder">自动触发用户消息（内容已隐藏）</string>
     <string name="chat_hidden_user_message_badge">自动触发</string>
     <string name="info">信息</string>
@@ -1660,6 +1733,7 @@
     <string name="exit_multi_select">退出多选</string>
     <string name="select_all_messages">全选</string>
     <string name="clear_selection">取消</string>
+    <string name="multi_select_actions">操作</string>
     <string name="delete_selected">删除选中</string>
     <string name="share_selected">分享</string>
     <string name="add_selected_to_memory">纳入总结记忆</string>
@@ -2601,8 +2675,18 @@
     <!-- Speech Services Settings -->
     <string name="speech_services_tts_title">文本转语音 (TTS) 设置</string>
     <string name="speech_services_tts_desc">配置如何将文本转换为语音输出</string>
+    <string name="speech_services_tts_profiles">TTS 配置档案</string>
     <string name="speech_services_stt_title">语音转文本 (STT) 设置</string>
     <string name="speech_services_stt_desc">配置如何将语音转换为文本</string>
+    <string name="speech_services_stt_profiles">STT 配置档案</string>
+    <string name="speech_services_profile_current">当前档案</string>
+    <string name="speech_services_profile_create">新建配置档案</string>
+    <string name="speech_services_profile_created">配置档案已创建</string>
+    <string name="speech_services_profile_delete">删除配置档案</string>
+    <string name="speech_services_profile_delete_message">确定删除“%1$s”吗？</string>
+    <string name="speech_services_profile_loading">正在加载配置档案…</string>
+    <string name="speech_services_profile_migrated_tts">迁移的 TTS 配置</string>
+    <string name="speech_services_profile_migrated_stt">迁移的 STT 配置</string>
     <string name="speech_services_tts_speech_rate_value">语速: %1$.2fx</string>
     <string name="speech_services_tts_pitch_value">音调: %1$.2fx</string>
     <string name="speech_services_service_type">服务类型</string>
@@ -3086,7 +3170,7 @@
     <string name="thinking_type_off">off</string>
     <string name="thinking_type_mode">mode</string>
     <string name="thinking_quality">思考程度</string>
-    <string name="thinking_quality_desc">仅在思考模式下生效。GPT-5.6 系列使用 5 档，其它模型保持原有 4 档；数值越高思考越深。</string>
+    <string name="thinking_quality_desc">仅在思考模式下生效。可用值与当前模型和服务提供商的真实映射一致。</string>
     <string name="model_config">模型配置</string>
     <string name="model_config_desc">在这里选择一个已经配置好的模型，或者点击下方的管理配置去新建或修改模型</string>
     <string name="prompt">提示词</string>
@@ -3094,17 +3178,19 @@
     <string name="memory">记忆</string>
     <string name="memory_desc">选择当前对话使用的独立记忆空间</string>
     <string name="memory_space_select">选择记忆空间</string>
-    <string name="memory_space_create">新建记忆空间</string>
-    <string name="memory_space_rename">重命名记忆空间</string>
-    <string name="memory_space_delete">删除记忆空间</string>
-    <string name="memory_space_name">记忆空间名称</string>
-    <string name="memory_space_delete_warning">确定删除“%1$s”及其中的全部记忆吗？此操作无法撤销。</string>
     <string name="memory_auto_update">自动保存记忆</string>
     <string name="memory_auto_update_desc">开启后，当前轮回复结束时会先把候选内容加入长期记忆队列，并在应用存活期间由后台定时整理写入记忆库。</string>
     <string name="memory_auto_update_runtime_status">待提取记忆的条数%1$d，距离下次保存%2$d分钟</string>
     <string name="chat_summarizing_memory">正在总结记忆...</string>
     <string name="chat_input_processing_collect_failed">输入处理状态收集失败: %1$s</string>
     <string name="chat_input_hint">输入消息...</string>
+    <string name="chat_pasted_text_attached">已将粘贴文本作为附件添加：%1$s</string>
+    <string name="settings_section_chat_input">聊天输入</string>
+    <string name="long_pasted_text_to_file">超长粘贴文本转文件</string>
+    <string name="long_pasted_text_to_file_desc">粘贴超过设定字符数的文本时，自动作为文本附件添加</string>
+    <string name="long_pasted_text_threshold">转换阈值</string>
+    <string name="long_pasted_text_threshold_desc">粘贴文本超过此字符数时转为文件</string>
+    <string name="long_pasted_text_threshold_unit">字符</string>
     <string name="chat_pending_queue_title">待发送队列（%1$d）</string>
     <string name="chat_queue_add_message">加入发送队列</string>
     <string name="chat_queue_added">已加入发送队列</string>
@@ -3133,6 +3219,9 @@
     <string name="chat_delete_single_variant_unavailable">当前消息没有可删除的单次候选</string>
     <string name="chat_delete_single_variant_failed">删除单次消息失败: %1$s</string>
     <string name="chat_delete_message_confirm_message">确定要删除这条消息吗？此操作不可恢复。</string>
+    <plurals name="chat_delete_selected_messages_confirm">
+        <item quantity="other">确定要删除选中的 %1$d 条消息吗？此操作不可恢复。</item>
+    </plurals>
     <string name="chat_switch_variant_failed">切换回答失败: %1$s</string>
     <string name="chat_message_variant_counter">%1$d/%2$d</string>
     <string name="chat_previous_variant">上一条回答</string>
@@ -3326,7 +3415,7 @@
     <string name="chat_start_ai_computer_failed">启动AI电脑失败: %1$s</string>
     <string name="chat_ai_computer_closed_due_to_workspace">AI电脑已关闭（由于打开工作区）</string>
     <string name="thinking_mode">思考模式</string>
-    <string name="thinking_mode_desc">目前支持Gemini、Qwen3、Claude、豆包、NVIDIA、硅基流动和MNN本地模型，能够启用内置的思考。</string>
+    <string name="thinking_mode_desc">控制模型的内置思考开关与思考程度。实际效果取决于当前模型和服务提供商，部分模型可能仅支持开关。</string>
     <string name="details">详情</string>
     <string name="model_selection">模型选择</string>
     <string name="prompt_selection">提示词选择</string>
@@ -3364,6 +3453,25 @@
     <string name="batch_assign_description">批量将所选对话绑定到指定角色卡或分组。可以仅修改分组而不切换角色卡，也可以同时修改两者。</string>
     <string name="batch_assign_title">历史记录批量归类</string>
     <string name="batch_assign_subtitle">选择多个聊天记录并批量调整角色卡绑定或分组</string>
+    <string name="chat_history_batch_operations_title">聊天记录批量操作</string>
+    <string name="chat_history_batch_operations_subtitle">选择聊天记录后进行管理或构建记忆库</string>
+    <string name="chat_history_batch_management">批量管理</string>
+    <string name="chat_history_selected_actions">操作已选聊天 (%1$d)</string>
+    <string name="chat_history_selected_actions_title">已选聊天操作</string>
+    <string name="chat_memory_rebuild_title">分窗口构建记忆库</string>
+    <string name="chat_memory_rebuild_subtitle">按有限的原始用户和助手消息窗口依次提取记忆</string>
+    <string name="chat_memory_rebuild_window_size">每个窗口的消息数</string>
+    <string name="chat_memory_rebuild_window_size_value">%1$d 条消息</string>
+    <string name="chat_memory_rebuild_start">为已选 %1$d 条聊天构建记忆</string>
+    <string name="chat_memory_rebuild_preparing">正在读取聊天记录并规划窗口...</string>
+    <string name="chat_memory_rebuild_progress">%1$s · 窗口 %2$d/%3$d · 消息 %4$d/%5$d · 失败 %6$d</string>
+    <string name="chat_memory_rebuild_completed">构建完成：%1$d 条聊天，%2$d 个窗口，失败 %3$d 个</string>
+    <string name="chat_memory_rebuild_cancel">取消构建</string>
+    <string name="chat_memory_rebuild_cancelled">构建已取消，已完成 %1$d/%2$d 个窗口</string>
+    <string name="chat_memory_rebuild_failed">构建失败：%1$s</string>
+    <string name="chat_memory_rebuild_confirm_title">确认构建记忆库</string>
+    <string name="chat_memory_rebuild_confirm_message">将把已选的 %1$d 条聊天按每窗 %2$d 条消息顺序交给记忆模型处理。过程会产生模型请求并写入对应记忆空间。</string>
+    <string name="chat_memory_rebuild_confirm_action">开始构建</string>
     <string name="long_press_to_manage">长按管理</string>
     <string name="edit_title_desc">编辑标题</string>
     <string name="reorder">Reorder</string>
@@ -3375,7 +3483,7 @@
     <string name="history_scroll_to_bottom">滚动到底部</string>
     
     <!-- Settings Screen Subtitles -->
-    <string name="settings_user_preferences_subtitle">编辑和预览 user.md</string>
+    <string name="settings_user_preferences_subtitle">管理用户资料和关联记忆库</string>
     <string name="settings_language_subtitle">界面语言切换</string>
     <string name="settings_theme_subtitle">主题和外观定制</string>
     <string name="layout_adjustment">布局调整</string>
@@ -3386,6 +3494,11 @@
     <string name="settings_speech_services_subtitle">TTS/STT服务设置</string>
     <string name="settings_custom_headers">自定义请求头</string>
     <string name="settings_custom_headers_subtitle">API请求头字段配置</string>
+    <string name="thinking_config_title">思考配置</string>
+    <string name="thinking_config_subtitle">按规则顺序匹配思考参数，首条命中生效</string>
+    <string name="thinking_config_rule_order_hint">规则会从上到下依次匹配模型，第一条启用且命中的规则生效。使用每条规则右侧的箭头调整顺序。</string>
+    <string name="thinking_config_rule_move_up">上移规则</string>
+    <string name="thinking_config_rule_move_down">下移规则</string>
     <string name="headers_configured_count">已配置 %1$d 条</string>
     <string name="screen_title_external_http_chat_settings">外部 HTTP 调用</string>
     <string name="settings_system_prompts_subtitle">系统和模型提示词</string>
@@ -3458,7 +3571,7 @@
     <string name="settings_total_cost">总费用</string>
     <string name="settings_total_requests">总请求次数</string>
     <string name="settings_model_usage_distribution">模型使用分布</string>
-    <string name="settings_model_details">模型详情</string>
+    <string name="settings_model_details">配置详情</string>
     <string name="settings_click_to_edit_pricing">点击编辑定价和计费方式</string>
     <string name="settings_edit_model_pricing">编辑模型定价 - %1$s</string>
     <string name="settings_pricing_description">设置每百万Token的人民币价格</string>
@@ -3466,7 +3579,6 @@
     <string name="settings_pricing_description_with_currency">设置每百万Token价格（%1$s）</string>
     <string name="settings_token_price_description_with_currency">设置每次API请求价格（%1$s）</string>
     <string name="settings_exchange_rate_title">汇率设置</string>
-    <string name="settings_exchange_rate_subtitle">美元计费模型会按此汇率折算为人民币总费用</string>
     <string name="settings_usd_to_cny_rate_label">USD → CNY 汇率</string>
     <string name="settings_rate_applied_hint">总费用按 1 USD = %1$.4f CNY 折算</string>
     <string name="settings_input_price_per_million">输入价格（每百万Token）</string>
@@ -3489,6 +3601,7 @@
     <string name="settings_reset_model_counts">重置该模型</string>
     <string name="settings_reset_model_confirmation">重置模型确认</string>
     <string name="settings_reset_model_warning">这将清除 %1$s 的Token和请求次数统计，此操作不可恢复。</string>
+    <string name="settings_token_stats_reset_failed">重置统计失败，请重试</string>
     <string name="settings_reset">重置</string>
     <string name="settings_edit_pricing">编辑定价</string>
     <string name="settings_input_tokens">输入Token</string>
@@ -3496,6 +3609,81 @@
     <string name="settings_cached_tokens_label">缓存Token</string>
     <string name="settings_price_format">¥%.2f/1M</string>
     <string name="settings_cost">费用</string>
+
+    <!-- Token 统计页（阶段 4） -->
+    <string name="token_stats_lifetime_total">累计消耗</string>
+    <string name="token_stats_lifetime_models">模型累计</string>
+    <string name="token_stats_lifetime_model_value">%1$s Token · %2$d%%</string>
+    <string name="token_stats_tokens_total">总Token</string>
+    <string name="token_stats_rate_default_hint">默认估算：1 USD = %1$s CNY（未手动设置）</string>
+    <string name="token_stats_rate_applied_hint">按 1 USD = %1$s CNY 换算</string>
+    <string name="token_stats_rate_invalid">汇率必须为正的有限数值</string>
+    <string name="token_stats_rate_summary">1 USD = %1$s CNY</string>
+    <string name="token_stats_rate_input_prefix">1 USD =</string>
+    <string name="token_stats_rate_estimated">默认估算</string>
+    <string name="token_stats_rate_manual">已手动设置</string>
+    <string name="token_stats_rate_edit">编辑汇率</string>
+    <string name="token_stats_unknown_cost">其中 %1$d 个请求费用未知</string>
+    <string name="token_stats_unknown_parts">%1$d 个请求部分数据未知</string>
+    <string name="token_stats_request_count_compact">%1$s 次请求</string>
+    <string name="token_stats_unknown_part_suffix">未知 %1$d</string>
+    <string name="token_stats_token_uncached">未缓存输入</string>
+    <string name="token_stats_token_cached">缓存读取</string>
+    <string name="token_stats_cache_rate">缓存率</string>
+    <string name="token_stats_token_output">输出</string>
+    <string name="token_stats_date_range">日期范围</string>
+    <string name="token_stats_range_analysis">范围分析</string>
+    <string name="token_stats_period_overview">周期总览</string>
+    <string name="token_stats_composition">Token 构成</string>
+    <string name="token_stats_filters">筛选条件</string>
+    <string name="token_stats_trends">趋势分析</string>
+    <string name="token_stats_settings">统计设置</string>
+    <string name="token_stats_custom_range_confirm">确定</string>
+    <string name="token_stats_custom_range_invalid">结束日期需晚于开始日期</string>
+    <string name="token_stats_custom_range_too_long">自定义范围不能超过 3 年</string>
+    <string name="token_stats_filter_all_models">全部模型</string>
+    <string name="token_stats_filter_models_count">%1$d 个模型</string>
+    <string name="token_stats_filter_model_label">模型：%1$s</string>
+    <string name="token_stats_currency">总计币种</string>
+    <string name="token_stats_currency_cny">CNY</string>
+    <string name="token_stats_currency_usd">USD</string>
+    <string name="token_stats_chart_cost">费用趋势</string>
+    <string name="token_stats_chart_requests">请求趋势</string>
+    <string name="token_stats_chart_tokens">Token趋势</string>
+    <string name="token_stats_metric_cost">费用</string>
+    <string name="token_stats_metric_requests">请求</string>
+    <string name="token_stats_metric_tokens">Token</string>
+    <string name="token_stats_unit_millions">M</string>
+    <string name="token_stats_unit_billions">B</string>
+    <string name="token_stats_unit_toggle_description">当前 Token 单位为 %1$s，点击切换为 %2$s</string>
+    <string name="token_stats_no_data_in_range">该范围暂无数据</string>
+    <string name="token_stats_empty">暂无统计数据</string>
+    <string name="token_stats_empty_hint">模型调用统计将在此显示</string>
+    <string name="token_stats_load_failed">统计加载失败，请重试</string>
+    <string name="token_stats_retry">重试</string>
+    <string name="token_stats_model_count">%1$d 个模型</string>
+    <string name="token_stats_configuration_count">%1$d 个配置</string>
+    <string name="token_stats_model_expand">展开或收起详情</string>
+    <string name="token_stats_model_show_all">展开全部（%1$d）</string>
+    <string name="token_stats_model_collapse">收起</string>
+    <string name="token_stats_pricing_configuration">配置价格</string>
+    <string name="token_stats_pricing_model">模型价格</string>
+    <string name="token_stats_price_label">单价</string>
+    <string name="token_stats_unknown_pricing">定价未知</string>
+    <string name="token_stats_config_deleted">已删除的配置</string>
+    <string name="token_stats_pricing_edit">编辑覆盖</string>
+    <string name="token_stats_pricing_delete">删除</string>
+    <string name="token_stats_pricing_input">输入价格（每百万）</string>
+    <string name="token_stats_pricing_cached">缓存读取价格（每百万）</string>
+    <string name="token_stats_pricing_cache_write">缓存写入价格（每百万）</string>
+    <string name="token_stats_pricing_output">输出价格（每百万）</string>
+    <string name="token_stats_pricing_per_request">每次请求价格</string>
+    <string name="token_stats_pricing_save_failed">价格覆盖保存失败</string>
+    <string name="token_stats_pricing_delete_failed">价格覆盖删除失败</string>
+    <string name="token_stats_chart_prev_bucket">上一个时间桶</string>
+    <string name="token_stats_chart_next_bucket">下一个时间桶</string>
+    <string name="token_stats_chart_bucket_of">第 %1$d / %2$d 桶</string>
+    <string name="token_stats_chart_summary">%1$s，%2$s，%3$s，合计 %4$s</string>
     
     <!-- User Preferences Guide Screen -->
     <string name="user_male">男</string>
@@ -3817,6 +4005,10 @@
     <string name="enable_direct_video_processing_desc">启用后，视频将直接发送给AI处理，而不是通过工具抽帧/分析</string>
     <string name="enable_google_search">启用 Google Search</string>
     <string name="enable_google_search_desc">启用后，Gemini 将使用 Google 搜索来增强回答（可能产生额外费用）</string>
+    <string name="enable_deepseek_web_search">启用 DeepSeek 网络搜索</string>
+    <string name="enable_deepseek_web_search_desc">使用 DeepSeek Responses 端点时，允许模型使用服务端网络搜索。</string>
+    <string name="enable_codex_web_search">启用 Codex 网络搜索</string>
+    <string name="enable_codex_web_search_desc">登录 Codex 后，允许模型使用服务端网络搜索。</string>
     <string name="enable_claude_1h_prompt_cache">启用 Claude 1 小时提示缓存</string>
     <string name="enable_claude_1h_prompt_cache_desc">启用后，Claude 和 Claude 兼容供应商的提示缓存 TTL 将使用 1 小时</string>
     <string name="enable_tool_call">模型支持ToolCall</string>
@@ -3824,6 +4016,10 @@
     <string name="enable_deepseek_reasoning">启用 DeepSeek 推理模式</string>
     <string name="enable_deepseek_reasoning_desc">启用后，&lt;think&gt;标签内的内容将作为reasoning_content发送给DeepSeek模型，用于支持DeepSeek-R1等推理模型的工具调用</string>
     <string name="search_sources">搜索来源</string>
+    <string name="search_query_label">查询</string>
+    <string name="search_action_label">动作</string>
+    <string name="search_status_label">状态</string>
+    <string name="search_source_count">%1$d 个来源</string>
     <string name="api_settings_saved">API设置已保存</string>
     <string name="save_api_settings">保存API设置</string>
     <string name="available_models_list">可用模型列表</string>
@@ -3841,6 +4037,7 @@
     <string name="auto_save_failed">自动保存失败</string>
     <!-- API Provider names -->
     <string name="provider_openai">OpenAI (GPT系列)</string>
+    <string name="provider_xai">SpaceXAI (Grok)</string>
     <string name="provider_openai_responses">OpenAI (Responses API)</string>
     <string name="provider_openai_responses_generic">OpenAI Responses通用</string>
     <string name="provider_anthropic">Anthropic (Claude系列)</string>
@@ -3859,6 +4056,7 @@
     <string name="provider_siliconflow">硅基流动</string>
     <string name="provider_iflow">iFlow</string>
     <string name="provider_openrouter">OpenRouter (多模型聚合)</string>
+    <string name="provider_opencode">OpenCode</string>
     <string name="provider_4router">4Router</string>
     <string name="provider_nous_portal">Nous Portal</string>
     <string name="provider_infiniai">无问芯穹</string>
@@ -3870,6 +4068,7 @@
     <string name="provider_llama_cpp">llama.cpp 本地推理</string>
     <string name="provider_ppinfra">派欧云</string>
     <string name="provider_novita">Novita AI</string>
+    <string name="provider_minimax">MiniMax</string>
     <string name="provider_openai_generic">OpenAI通用</string>
     <string name="provider_other">其他供应商</string>
     <string name="select_api_provider_title">选择API提供商</string>
@@ -3914,6 +4113,7 @@
     <string name="parameter_value">参数值</string>
     <string name="parameter_range_format">范围: %1$s - %2$s</string>
     <string name="overseas_provider_warning">检测到您在中国大陆，但选择了海外服务商。请确认是否已开启代理工具</string>
+    <string name="international_proxy_provider_warning">该服务通过国际第三方代理中转。在中国大陆访问需要代理工具；请求数据将经第三方转发，请留意网络环境、服务条款与数据合规政策。</string>
     
     <!-- 自定义参数对话框 -->
     <string name="custom_parameter_added">自定义参数已新增</string>
@@ -3974,7 +4174,7 @@
     <string name="screen_title_memory_base">记忆库</string>
     <string name="screen_title_tool_permissions">工具权限</string>
     <string name="screen_title_user_preferences_guide">用户偏好引导</string>
-    <string name="screen_title_user_preferences_settings">用户资料（user.md）</string>
+    <string name="screen_title_user_preferences_settings">用户资料设置</string>
     <string name="screen_title_model_config">模型与参数配置</string>
     <string name="screen_title_speech_services_settings">语音服务设置</string>
     <string name="screen_title_persona_card_generation">人设卡生成</string>
@@ -4274,22 +4474,25 @@
     <string name="market_section_manage">管理</string>
     <string name="market_section_publish">发布</string>
     <string name="market_notifications_title">消息列表</string>
+    <string name="market_agreement_entry">市场协议</string>
     <string name="market_notifications_empty_title">暂无消息</string>
     <string name="market_notifications_empty_description">市场消息会显示在这里</string>
     <string name="market_manage_removed">已提交移除「%1$s」的请求</string>
     <string name="market_manage_resubmitted">已提交重新上架「%1$s」的请求</string>
     <string name="market_manage_resubmit">重新提交</string>
+    <string name="market_manage_submit_revision">修改后提交新版本</string>
+    <string name="market_manage_loading_request_title">正在加载请求</string>
+    <string name="market_manage_loading_request_message">请求正在处理中，请稍候…</string>
     <string name="market_manage_resubmitting_title">正在重新提交</string>
     <string name="market_manage_resubmitting_message">正在提交审核请求，请稍候…</string>
-    <string name="market_manage_resubmit_cooldown_message">该条目已进入本地冷却期，剩余 %1$s 后才能再次提交。</string>
     <string name="market_manage_resubmit_rejected_blocked">该条目已被拒绝，客户端不允许再次提交。</string>
     <string name="market_manage_resubmit_state_blocked">只有已打回的条目可以重新提交。</string>
     <string name="market_manage_resubmit_confirm_title">确认重新提交？</string>
     <string name="market_manage_resubmit_confirm_message">将把「%1$s」重新提交到审核队列。</string>
     <string name="market_manage_resubmit_last_state">上次审核：%1$s</string>
     <string name="market_manage_resubmit_last_reason">打回原因：%1$s</string>
+    <string name="market_manage_review_detail">审核说明：%1$s</string>
     <string name="market_manage_review_dialog_title">审核状态</string>
-    <string name="market_manage_resubmit_confirm_warning">请确认已经按打回原因完成修改。提交成功后，本地 12 小时内不可再次提交。</string>
     <string name="market_manage_resubmit_confirm_action">确认提交</string>
     <string name="market_error_load_failed">加载失败</string>
     <string name="market_error_action_failed">操作失败</string>
@@ -4308,6 +4511,38 @@
     <string name="market_publish_new_version_detail_desc">该插件允许社区协作更新。你可以为它提交一个新版本，审核通过后会进入公开列表。</string>
     <string name="market_allow_public_updates_title">允许所有人更新该插件</string>
     <string name="market_allow_public_updates_desc">开启后，其他登录用户也可以为该插件提交新版本；只有最初发布者可以修改这个开关。</string>
+    <string name="artifact_publish_encrypt_title">压缩并混淆发布</string>
+    <string name="artifact_publish_encrypt_desc">开启后，脚本将进行 JS 语法树压缩。产物保持可直接导入和运行。</string>
+    <string name="artifact_publish_encrypt_confirmation">压缩并混淆发布: %1$s</string>
+    <string name="artifact_publish_encrypt_market_toolpkg_title">压缩并混淆发布</string>
+    <string name="artifact_publish_encrypt_market_toolpkg_desc">开启后，ToolPkg 内的可执行脚本将进行 JS 语法树压缩。压缩后的包仍是普通 ZIP，可直接导入。</string>
+    <string name="artifact_publish_encrypt_market_toolpkg_confirmation">压缩并混淆发布: %1$s</string>
+    <string name="artifact_publish_asset_source_title">发布资源来源</string>
+    <string name="artifact_publish_asset_source_upload">上传当前本地包</string>
+    <string name="artifact_publish_asset_source_github_release">引用 GitHub Release 资产</string>
+    <string name="artifact_publish_asset_source_confirmation">发布资源来源: %1$s</string>
+    <string name="artifact_publish_logo_title">包 Logo</string>
+    <string name="artifact_publish_logo_description">可选择新的图片。直接上传会把它写入发布包，GitHub Release 模式只更新市场 Logo。</string>
+    <string name="artifact_publish_logo_choose">选择 Logo</string>
+    <string name="artifact_publish_logo_use_package">使用包内 Logo</string>
+    <string name="artifact_publish_logo_selected">已选择: %1$s</string>
+    <string name="artifact_publish_logo_from_package">包内 Logo: %1$s</string>
+    <string name="artifact_publish_logo_confirmation">Logo: %1$s</string>
+    <string name="artifact_publish_logo_preview">Logo 预览</string>
+    <string name="artifact_publish_logo_invalid">无法读取 Logo，请选择有效的 SVG、PNG、JPEG 或 WebP 文件</string>
+    <string name="artifact_publish_logo_too_large">Logo 文件不能超过 512 KiB</string>
+    <string name="artifact_publish_logo_market_preview">预览市场效果</string>
+    <string name="artifact_publish_logo_market_preview_title">市场效果预览</string>
+    <string name="artifact_publish_logo_market_list">列表</string>
+    <string name="artifact_publish_logo_market_detail">详情</string>
+    <string name="artifact_publish_logo_market_preview_action">安装插件（预览）</string>
+    <string name="artifact_publish_logo_market_preview_account">当前账号</string>
+    <string name="artifact_publish_logo_market_preview_untitled">未命名工具包</string>
+    <string name="artifact_publish_logo_market_preview_empty_description">暂无描述</string>
+    <string name="artifact_publish_github_repository_url">作者 GitHub 仓库链接</string>
+    <string name="artifact_publish_load_github_releases">加载 Release</string>
+    <string name="artifact_publish_github_release">GitHub Release</string>
+    <string name="artifact_publish_github_release_asset">Release 资产</string>
     <string name="market_login_required_hint">登录 GitHub 后可管理和发布市场内容</string>
     <string name="user_avatar">用户头像</string>
     <string name="clear_search">清空搜索</string>
@@ -4351,11 +4586,11 @@
 
     <string name="github_account">GitHub 账户</string>
     <string name="login_github">登录 GitHub</string>
-    <string name="github_login_method_description">请选择 GitHub 登录方式。内嵌模式适合无法调起外部浏览器的设备，外部浏览器模式兼容性更好。</string>
+    <string name="github_login_method_description">请选择 GitHub 登录方式。内嵌页面会在应用内完成授权；外部浏览器会调起系统浏览器并在授权后回到应用。</string>
     <string name="github_login_method_embedded">使用内嵌页面登录</string>
     <string name="github_login_method_external">使用外部浏览器登录</string>
+    <string name="github_login_starting">正在准备 GitHub 授权…</string>
     <string name="github_login_external_waiting">已打开浏览器，请在完成授权后返回应用。</string>
-    <string name="github_login_external_cancelled">已取消 GitHub 授权</string>
     <string name="publish_mcp_plugins_to_market">• 发布您的 MCP 插件到市场</string>
     <string name="manage_published_plugins">• 管理您已发布的插件</string>
     <string name="better_installation_experience">• 获得更好的安装体验</string>
@@ -4492,6 +4727,7 @@
     <string name="artifact_publish_stage_ensuring_repo">正在检查 OperitForge 仓库</string>
     <string name="artifact_publish_stage_creating_release">正在创建或更新 GitHub Release</string>
     <string name="artifact_publish_stage_uploading_asset">正在上传发布资源</string>
+    <string name="artifact_publish_stage_resolving_release_asset">正在核对 GitHub Release 资产</string>
     <string name="artifact_publish_stage_registering_market">正在登记市场条目</string>
     <string name="artifact_publish_stage_completed">发布完成</string>
     <string name="artifact_publish_success_header">已发布「%1$s」到 %2$s</string>
@@ -4524,6 +4760,8 @@
     <string name="artifact_publish_published_name_readonly">已发布作品的命名不可修改</string>
     <string name="artifact_publish_locked_name_must_match_source">基于版本发布时，插件名字必须和来源版本保持一致</string>
     <string name="artifact_publish_published_version_readonly">已发布节点的版本号不可修改</string>
+    <string name="artifact_publish_toolpkg_version_readonly">ToolPkg 发布版本来自包内 manifest，发布前不可手动修改</string>
+    <string name="artifact_publish_toolpkg_api_version_readonly">ToolPkg API 版本来自包内 manifest，发布前不可手动修改</string>
     <string name="artifact_publish_save_artifact_info">保存作品信息</string>
     <string name="artifact_publish_publish_update_version">发布更新版本</string>
     <string name="artifact_publish_confirm_save_artifact_info">确认保存作品信息</string>
@@ -4599,6 +4837,9 @@
     <string name="unsupported_artifact_version_title">当前软件版本可能不兼容</string>
     <string name="unsupported_artifact_version_message">「%1$s」声明支持的软件版本为 %3$s，当前软件版本是 %2$s。继续下载仍可能失败或不可用。</string>
     <string name="continue_download_anyway">仍然继续下载</string>
+    <string name="market_version_incompatible_title">无法下载：客户端版本不受支持</string>
+    <string name="market_version_too_low_message">当前客户端版本 %1$s 低于该资源要求的最低版本 %2$s。请更新客户端后再下载。</string>
+    <string name="market_version_too_high_message">当前客户端版本 %1$s 高于该资源最高支持的版本 %2$s。请使用受支持的客户端版本。</string>
     <string name="publisher_colon">发布者: %1$s</string>
     <string name="market_registrar_colon">登记者 %1$s</string>
     <string name="downloaded_already">已下载</string>
@@ -4608,6 +4849,7 @@
     <string name="market_sort_updated">最近更新</string>
     <string name="market_sort_downloads">下载量</string>
     <string name="market_sort_likes">点赞量</string>
+    <string name="market_comment_sort_newest">最新</string>
     <string name="market_sort_featured">精选</string>
     <string name="market_filter_featured_only">精选</string>
     <string name="market_stat_downloads_short">下载 %1$d</string>
@@ -4929,6 +5171,13 @@
     <string name="external_http_chat_save_token">保存</string>
     <string name="external_http_chat_token_saved">Token 已保存</string>
     <string name="external_http_chat_token_length_error">Token长度需大于6!</string>
+    <string name="external_http_chat_a2a_title">A2A Agent 接口</string>
+    <string name="external_http_chat_a2a_desc">使用同一监听端口和 Bearer Token 提供 A2A 1.0 JSON-RPC 服务。先将 Agent Card 地址交给 A2A 客户端发现。</string>
+    <string name="external_http_chat_a2a_agent_card">Agent Card 地址</string>
+    <string name="external_http_chat_a2a_json_rpc">JSON-RPC 地址</string>
+    <string name="external_http_chat_a2a_copy_agent_card">复制 Agent Card</string>
+    <string name="external_http_chat_a2a_copy_json_rpc">复制 JSON-RPC</string>
+    <string name="external_http_chat_a2a_url_copied">A2A 地址已复制</string>
 
     <!-- Custom Emoji Management -->
     <string name="manage_custom_emoji">管理自定义表情</string>
@@ -5301,10 +5550,6 @@
     <string name="font_file_saved">字体文件已保存 (.%1$s)</string>
     <string name="font_file_save_failed">字体文件保存失败</string>
     <string name="unsupported_font_format">不支持的文件格式，请选择 .ttf, .otf 或 .ttc 字体文件</string>
-    <string name="current_character">当前角色: %1$s</string>
-    <string name="current_character_group">当前角色群聊: %1$s</string>
-    <string name="theme_auto_bind_character_card">主题设置将自动绑定到此角色卡</string>
-    <string name="theme_auto_bind_character_group">主题设置将自动绑定到此角色群聊</string>
     <string name="enable_custom_font">启用自定义字体</string>
     <string name="use_system_or_custom_font">使用系统字体或自定义字体文件</string>
     <string name="font_type_label">字体类型</string>
@@ -5528,6 +5773,9 @@
     <string name="mood_tag_block">情绪标签</string>
     <string name="thinking_tools_group_title_with_count">思考与工具调用（%1$d）</string>
     <string name="tools_group_title_with_count">工具调用（%1$d）</string>
+    <string name="search_group_title">搜索</string>
+    <string name="thinking_search_group_title">思考并搜索</string>
+    <string name="thinking_search_tools_group_title_with_count">思考、搜索并调用工具（%1$d）</string>
     
     <!-- 备份设置界面 -->
     <string name="backup_data_overview">数据概览</string>
@@ -5599,12 +5847,10 @@
     <string name="backup_raw_snapshot_restore_confirm_message">将使用以下备份文件覆盖当前应用数据：\n%1$s\n\n此操作不可撤销。建议先执行一次备份再恢复。</string>
     <string name="backup_raw_snapshot_restore_confirm_action">确认恢复</string>
     <string name="backup_raw_snapshot_restore_cancel_action">取消</string>
-    <string name="backup_raw_snapshot_restart_title">需要重启应用</string>
-    <string name="backup_raw_snapshot_restart_message">文件快照已恢复。为避免旧的缓存/连接导致异常，建议立即重启应用。</string>
-    <string name="backup_raw_snapshot_restart_now">立即重启</string>
-    <string name="backup_raw_snapshot_restart_later">稍后</string>
-
     <string name="backup_chat_history">聊天记录</string>
+    <string name="backup_select_chat_records">选择聊天记录</string>
+    <string name="backup_select_chat_records_hint">请选择要导出的聊天记录。</string>
+    <string name="backup_clear_selection">清空</string>
     <string name="backup_chat_history_subtitle">跨格式备份、导出与恢复</string>
     <string name="backup_chat_current_count">当前共有 %1$d 条聊天记录。</string>
     <string name="backup_export">导出</string>
@@ -5620,6 +5866,7 @@
     <string name="backup_model_config_current_count">当前共有 %1$d 个模型配置。</string>
     
     <string name="backup_exporting">正在导出%1$s...</string>
+    <string name="backup_text_export_progress">正在导出超长文本：%1$d%%（已处理 %2$d / %3$d 个字符）</string>
     <string name="backup_importing">正在导入%1$s...</string>
     <string name="backup_deleting">正在清除聊天记录...</string>
     <string name="backup_export_success">导出成功</string>
@@ -5647,6 +5894,8 @@
     <string name="backup_format_html_desc">网页格式，适合在浏览器中查看</string>
     <string name="backup_format_txt">纯文本</string>
     <string name="backup_format_txt_desc">简单的文本格式，便于分享</string>
+    <string name="backup_format_csv">CSV</string>
+    <string name="backup_format_csv_desc">表格格式，适合数据清洗和迁移</string>
     
     <!-- 导入格式选择 -->
     <string name="backup_select_import_format">选择导入格式</string>
@@ -5902,6 +6151,7 @@
     <string name="toolreg_update_chat_title_desc">更新对话标题: %1$s</string>
     <string name="toolreg_delete_chat_desc">删除对话: %1$s</string>
     <string name="toolreg_send_message_to_ai_desc">发送消息给AI: %1$s</string>
+    <string name="toolreg_call_chat_model_desc">调用功能模型: %1$s</string>
     <string name="toolreg_list_character_cards_desc">列出所有角色卡</string>
     <string name="toolreg_get_chat_messages_desc">获取对话消息: %1$s%2$s%3$s</string>
     <string name="toolreg_list_files_desc">列出目录内容: %1$s%2$s</string>
@@ -6019,6 +6269,8 @@
     <string name="memory_auto_save_interval_minutes">自动保存间隔（分钟）</string>
     <string name="memory_auto_save_interval_value">%1$d 分钟 · 范围 %2$d-%3$d</string>
     <string name="memory_auto_save_interval_hint">可调范围 %1$d-%2$d 分钟，默认 %3$d 分钟</string>
+    <string name="memory_extraction_custom_rules">记忆提取附加规则</string>
+    <string name="memory_extraction_custom_rules_placeholder">例如：只记录项目决策和用户偏好，按项目分类。</string>
     <string name="memory_search_mode_balanced">平衡模式</string>
     <string name="memory_search_mode_keyword_first">关键词优先</string>
     <string name="memory_search_mode_semantic_first">向量优先</string>
@@ -6259,6 +6511,7 @@
     <string name="headers_preset_lang_en">设置语言为英文</string>
     <string name="headers_preset_cmcc_gateway">模拟中国移动网关</string>
     <string name="headers_preset_us_la">模拟美国洛杉矶 (需配合)</string>
+    <string name="thinking_config_invalid_json">思考配置无效</string>
 
     <!-- Context Summary Settings Screen -->
     <string name="context_validation_failed">验证失败</string>
@@ -6600,6 +6853,13 @@
 
     <!-- Workflow -->
     <string name="workflow_load_failed">加载工作流失败</string>
+    <string name="workflow_storage_dir_unavailable">无法创建工作流目录：%1$s</string>
+    <string name="workflow_storage_dir_unreadable">无法读取工作流目录：%1$s</string>
+    <string name="workflow_storage_path_not_directory">工作流存储路径不是目录：%1$s</string>
+    <string name="workflow_storage_file_parent_missing">工作流文件缺少父目录：%1$s</string>
+    <string name="workflow_storage_file_root_invalid">工作流文件格式错误：%1$s 不是 JSON 对象</string>
+    <string name="workflow_storage_invalid_files">发现 %1$d 个工作流文件格式错误，已跳过：%2$s</string>
+    <string name="workflow_storage_single_file_invalid">工作流文件格式错误，无法打开：%1$s</string>
     <string name="workflow_create_failed">创建工作流失败</string>
     <string name="workflow_update_condition_failed">更新连接条件失败</string>
     <string name="workflow_update_failed">更新工作流失败</string>
@@ -6854,7 +7114,7 @@
     <string name="webvisit_url_label">访问网址:</string>
     <string name="webvisit_status_loading_page">正在加载页面...</string>
     <string name="webvisit_status_waiting_page">等待页面完全加载...</string>
-    <string name="webvisit_status_captcha">请在%1$d秒内完成人机验证...</string>
+    <string name="webvisit_load_timeout">网页加载超时，已结束本次访问。</string>
     <string name="webvisit_status_extracting">正在提取内容，%1$d秒后自动继续...</string>
     <string name="webvisit_status_extracted_waiting">内容已提取，等待手动继续...</string>
     <string name="webvisit_status_waiting_extraction">页面已加载，等待提取内容...</string>
@@ -6953,6 +7213,9 @@
     <string name="workflow_unknown_error">未知错误</string>
     <string name="workflow_in_list_type_mismatch">IN 列表类型不匹配：同时包含数字和非数字 right=\'%1$s\'</string>
     <string name="workflow_log_start_execution">开始执行工作流: %1$s (%2$s)</string>
+    <string name="workflow_log_runtime_initialization_failed">工作流运行环境初始化失败：%1$s</string>
+    <string name="workflow_log_startup_failed">工作流启动失败：%1$s</string>
+    <string name="workflow_log_execution_cancelled_reason">工作流执行已取消：%1$s</string>
     <string name="workflow_log_no_trigger_node">工作流没有触发节点</string>
     <string name="workflow_log_trigger_node_not_exist">指定的触发节点不存在: %1$s</string>
     <string name="workflow_log_scheduled_trigger">定时触发: 只执行指定触发节点 %1$s</string>
@@ -7043,6 +7306,11 @@
     <string name="visit_web_wait_time_title">Visit Web 网页访问等待时间</string>
     <string name="visit_web_wait_time_description">控制 visit_web 在提取页面内容后自动返回前的等待时长。设为 0 秒会立即返回。</string>
     <string name="visit_web_wait_time_value">%1$d 秒</string>
+    <string name="toolpkg_hook_timeout_title">前置插件 Hook 超时</string>
+    <string name="toolpkg_hook_timeout_description">限制发送路径上的 ToolPkg 聊天输入、Prompt 和摘要 Hook 链总等待时间。超时会跳过当前 Hook 并继续处理，默认 10 秒；不影响消息处理回复接管。</string>
+    <string name="toolpkg_hook_timeout_value">%1$d 秒</string>
+    <string name="toolpkg_hook_timeout_continue_sending">前置插件响应超时，已跳过并继续发送</string>
+    <string name="toolpkg_hook_timeout_continue_sending_with_plugin">前置插件「%1$s」响应超时，已跳过并继续发送</string>
     <string name="enable_enter_to_send">回车发送</string>
     <string name="enable_enter_to_send_description">开启后，聊天输入框按回车会直接发送，键盘发送键也会显示为发送。</string>
     <string name="tool_collapse_mode_title">折叠工具</string>
@@ -7150,9 +7418,9 @@
     <string name="ai_message_result_suffix">]</string>
     <string name="ai_message_result_omitted">[结果: %1$s 已省略]</string>
     <string name="ai_message_result_omitted_with_status">[结果: %1$s %2$s 已省略]</string>
-    <string name="ai_message_package_warmup_title">【工具包预热】</string>
-    <string name="ai_message_package_warmup_empty">本次摘要范围内未检测到包工具调用，因此未进行工具包预热。</string>
-    <string name="ai_message_package_warmup_intro">以下根据本次摘要范围内的工具使用频次，自动激活了最高频的工具包，并附上 use_package 的返回结果，供下一轮预热。</string>
+    <string name="ai_message_package_warmup_title">【已激活包】</string>
+    <string name="ai_message_package_warmup_empty">本次摘要范围内未检测到已激活包。</string>
+    <string name="ai_message_package_warmup_intro">以下已激活包可以直接使用。</string>
     <string name="ai_message_use_package_failed">use_package 调用失败: %1$s</string>
     <string name="ai_message_use_package_empty">use_package 返回为空。</string>
     <string name="ai_message_package_warmup_item">%1$d. 包 %2$s（命中 %3$d 次）</string>
@@ -7172,6 +7440,7 @@
     <string name="mnn_error_with_message">错误: %1$s</string>
     <string name="mnn_session_not_initialized">错误: LLM会话未初始化</string>
     <string name="mnn_reasoning_error">\n\n[推理过程出现错误]</string>
+    <string name="mnn_error_request_cancelled">请求已被用户取消</string>
     <string name="mnn_generic_error">错误: %1$s</string>
     <string name="mnn_model_not_configured">未配置模型名称</string>
     <string name="mnn_model_dir_missing">模型目录不存在: %1$s\n请先下载模型</string>
@@ -7377,6 +7646,7 @@
     <string name="openai_error_network_interrupted">网络中断</string>
     <string name="openai_audio_video_omitted">音视频内容已省略，当前模型不支持音视频处理</string>
     <string name="openai_image_omitted">图片内容已省略，当前模型不支持图片处理</string>
+    <string name="openai_file_omitted">文件内容已省略，当前模型不支持文件处理</string>
 
     <!-- WorkflowExecutor (新增) -->
     <string name="workflow_non_execute_node">非执行节点</string>
@@ -7488,6 +7758,7 @@
     <string name="conversation_media_image_link">&lt;link type=&quot;image&quot; id=&quot;%1$s&quot;&gt;图片&lt;/link&gt;</string>
     <string name="conversation_media_audio_link">&lt;link type=&quot;audio&quot; id=&quot;%1$s&quot;&gt;音频&lt;/link&gt;</string>
     <string name="conversation_media_video_link">&lt;link type=&quot;video&quot; id=&quot;%1$s&quot;&gt;视频&lt;/link&gt;</string>
+    <string name="conversation_media_file_link">&lt;link type=&quot;file&quot; id=&quot;%1$s&quot; filename=&quot;%2$s&quot;&gt;PDF&lt;/link&gt;</string>
     <string name="conversation_analyze_image_prompt">Please analyze this image.</string>
     <string name="conversation_analyze_audio_prompt">Please analyze this audio.</string>
     <string name="conversation_analyze_video_prompt">Please analyze this video.</string>
@@ -7500,6 +7771,7 @@
     <string name="llama_error_chat_template_failed">错误: 无法应用模型对话模板（llama_model_chat_template/llama_chat_apply_template）</string>
     <string name="llama_error_inference_failed">llama.cpp 推理过程出现错误</string>
     <string name="llama_error_inference_tag">[推理过程出现错误]</string>
+    <string name="llama_error_request_cancelled">请求已被用户取消</string>
 
     <!-- TaskExecutor -->
     <string name="task_error_execution_failed">任务执行失败: %1$s</string>
@@ -7512,6 +7784,9 @@
 
     <!-- ToolPermissionSystem -->
     <string name="tool_permission_operation">%1$s 操作</string>
+    <string name="tool_permission_execution_denied">工具执行权限被拒绝。</string>
+    <string name="tool_permission_overlay_required_for_confirmation">需要悬浮窗权限才能确认工具执行。</string>
+    <string name="tool_permission_confirmation_timeout">工具执行确认超时。</string>
 
     <!-- MessageImageGenerator -->
     <string name="message_image_capture_failed">图片捕获失败: %1$s</string>
@@ -7958,4 +8233,119 @@
     <string name="notification_kind_review_changes">需要修改</string>
     <string name="notification_kind_entry_curated">入选精选</string>
 
+
+    <string name="chat_category_all">所有</string>
+    <string name="chat_category_recent">最近</string>
+    <string name="chat_category_favorites">收藏</string>
+    <string name="add_to_favorites">收藏对话</string>
+    <string name="remove_from_favorites">取消收藏</string>
+    <string name="permission_review_policy_title">自动审核策略</string>
+    <string name="permission_review_policy_description">可在此按你的使用习惯追加审核规则，自动审核会遵守这些规则。当前策略版本：%1$s</string>
+    <string name="permission_review_policy_edit">编辑追加规则</string>
+    <string name="permission_review_policy_collapse">收起策略编辑</string>
+    <string name="permission_review_policy_managed_hint">这些规则会作为你的自定义要求发送给审核模型，审核会按你的习惯判断风险与授权。请只添加你真正愿意放行的规则。</string>
+    <string name="permission_review_policy_placeholder">例如：所有发布到公网的操作都必须转为人工确认。</string>
+    <string name="permission_review_recent_denials">最近拒绝</string>
+    <string name="permission_review_recent_denials_summary">共 %1$d 次拒绝，涉及 %2$d 个不同操作</string>
+    <string name="permission_review_recent_denials_open">查看统计和审核详情</string>
+    <string name="permission_review_recent_denials_statistics">拒绝统计</string>
+    <string name="permission_review_denial_total">拒绝总数</string>
+    <string name="permission_review_denial_unique_actions">不同操作</string>
+    <string name="permission_review_recent_denials_description">下方显示最近 10 个不同的被拒绝操作。点击记录可进入对应的审核 Subagent 查看完整过程。</string>
+    <string name="permission_review_recent_denials_empty">这个对话还没有被自动审核拒绝的操作</string>
+    <string name="permission_review_open_subagent_details">查看审核 Subagent 详情</string>
+    <string name="permission_review_subagent_unavailable">对应的审核 Subagent 已不可用</string>
+    <string name="permission_review_allow_exact_once">授权相同操作重新审核</string>
+    <string name="permission_review_override_recorded">已授权，等待 Agent 重试</string>
+    <string name="permission_review_override_in_review">正在重新审核</string>
+    <string name="permission_review_override_consumed">本次授权已使用</string>
+    <string name="permission_review_override_expired">授权已过期，可重新授权</string>
+    <string name="permission_review_override_next_step">授权有效 5 分钟。请返回主对话，让 Agent 重试完全相同的操作；不会由此按钮直接执行。</string>
+    <string name="permission_review_lifecycle_in_progress">审核中</string>
+    <string name="permission_review_lifecycle_approved">已允许</string>
+    <string name="permission_review_lifecycle_denied">已拒绝</string>
+    <string name="permission_review_lifecycle_timed_out">已超时</string>
+    <string name="permission_review_lifecycle_aborted">已中止</string>
+    <string name="permission_review_lifecycle_failed">审核失败</string>
+    <string name="permission_review_batch_lifecycle">Guardian · 本批工具 %1$d/%2$d · %3$s · %4$s</string>
+    <string name="permission_review_resolved_allow">随后由你或最新设置允许</string>
+    <string name="permission_review_resolved_deny">随后由你或最新设置拒绝</string>
+    <string name="permission_review_tap_for_details">点击查看状态、结论和审核对话</string>
+    <string name="permission_review_detail_title">Guardian 审核详情</string>
+    <string name="permission_review_detail_status">状态：%1$s</string>
+    <string name="permission_review_detail_action">操作：%1$s</string>
+    <string name="permission_review_detail_risk">风险等级：%1$s</string>
+    <string name="permission_review_detail_authorization">用户授权：%1$s</string>
+    <string name="permission_review_detail_rationale">审核结论：%1$s</string>
+    <string name="permission_review_detail_subagent_status">审核子任务：%1$s</string>
+    <string name="permission_review_detail_failure">失败原因：%1$s</string>
+    <string name="permission_review_value_low">低</string>
+    <string name="permission_review_value_medium">中</string>
+    <string name="permission_review_value_high">高</string>
+    <string name="permission_review_value_critical">严重</string>
+    <string name="permission_review_value_unknown">未知</string>
+    <string name="permission_review_failure_invalid_output">输出格式无效</string>
+    <string name="permission_review_failure_timed_out">审核超时</string>
+    <string name="permission_review_failure_reviewer_error">审核模型错误</string>
+    <string name="permission_review_open_subagent">进入审核对话</string>
+    <string name="permission_review_circuit_title">Guardian 已停止本轮操作</string>
+    <string name="permission_review_circuit_message">自动审核连续拒绝了多个操作。为保护你的数据，本轮剩余工具均未执行，对话已安全停止。</string>
+    <string name="permission_review_circuit_countdown">%1$d 秒后可确认</string>
+    <string name="permission_review_circuit_confirm">我知道了</string>
+    <string name="permission_review_circuit_ready">现在可以确认并关闭此提示</string>
+    <string name="permission_review_circuit_combined_count">已合并 %1$d 次连续安全中断</string>
+    <string name="permission_review_circuit_what_happened_title">发生了什么</string>
+    <string name="permission_review_circuit_what_happened_body">Guardian 连续拒绝了本轮中的多个工具调用。被拒绝的调用和本轮剩余工具都没有执行，因此系统停止了本轮。</string>
+    <string name="permission_review_circuit_what_to_do_title">你应该怎么做</string>
+    <string name="permission_review_circuit_what_to_do_body">先查看审核记录，确认被拒绝的操作和原因。若仍需执行，请回到主对话，明确说明具体操作、目标和范围后再让 AI 重试；不要授权你不理解的操作。</string>
+    <string name="token_activity_daily">每日</string>
+    <string name="token_activity_weekly">每周</string>
+    <string name="token_activity_cumulative">累计</string>
+    <string name="token_activity_title">活跃记录</string>
+    <string name="token_activity_current_streak_badge">当前连续 %1$d 天</string>
+    <string name="token_activity_longest_streak_badge">最长连续 %1$d 天</string>
+    <string name="token_activity_chart_tap_hint">点击图表查看详细数据</string>
+    <string name="token_activity_total_tokens">累计 Token</string>
+    <string name="token_activity_peak_tokens">峰值 Token</string>
+    <string name="token_activity_current_streak">当前连续</string>
+    <string name="token_activity_longest_streak">最长连续</string>
+    <string name="token_activity_days">%1$d 天</string>
+    <string name="token_activity_day_detail">%1$s使用了 %2$s Token</string>
+    <string name="token_activity_week_detail">%1$s - %2$s 使用了 %3$s Token</string>
+    <string name="token_activity_cumulative_detail">截至 %1$s 累计使用 %2$s Token</string>
+    <string name="token_activity_tap_hint">点击方格查看详细数据</string>
+    <string name="token_activity_less">少</string>
+    <string name="token_activity_more">多</string>
+    <string name="token_stats_detail_cost">费用明细</string>
+    <string name="token_stats_detail_requests">请求明细</string>
+    <string name="token_stats_detail_tokens">Token 明细</string>
+    <string name="token_stats_detail_close">关闭</string>
+    <string name="token_stats_detail_open">点击查看详细数据</string>
+    <string name="markdown_link_not_openable">该链接指向文档内部的引用，无法打开</string>
+
+    <string name="provider_openai_codex">OpenAI Codex (ChatGPT OAuth)</string>
+    <string name="onboarding_config_codex_login_required">请先登录 OpenAI Codex</string>
+    <string name="codex_login_title">登录 OpenAI Codex</string>
+    <string name="codex_login_starting">正在准备 Codex 登录...</string>
+    <string name="codex_login_waiting">请在浏览器中完成登录</string>
+    <string name="codex_login_action">登录 ChatGPT</string>
+    <string name="codex_login_success">OpenAI Codex 登录成功</string>
+    <string name="codex_login_failed">OpenAI Codex 登录失败：%1$s</string>
+    <string name="codex_logout_action">退出 Codex 登录</string>
+    <string name="codex_logout_success">已退出 OpenAI Codex 登录</string>
+    <string name="codex_auth_title">OpenAI Codex 账号</string>
+    <string name="codex_auth_not_logged_in">登录 ChatGPT 后使用 Codex 订阅额度</string>
+    <string name="codex_auth_account">账号：%1$s</string>
+    <string name="codex_endpoint_fixed">Codex endpoint 由系统固定</string>
+    <string name="codex_plan">套餐：%1$s</string>
+    <string name="codex_direct_media_processing">图片/PDF 直传</string>
+    <string name="codex_direct_media_processing_desc">将图片和 PDF 直接发送给 Codex 处理</string>
+    <string name="codex_quota_five_hour">近 5 小时</string>
+    <string name="codex_quota_seven_day">近 7 天</string>
+    <string name="codex_quota_remaining">剩余 %1$d%%</string>
+    <string name="codex_quota_no_data">暂无数据</string>
+    <string name="codex_usage_refresh">刷新 Codex 额度</string>
+    <string name="codex_usage_unavailable">额度暂时不可用</string>
+    <string name="codex_reset_after_days">%1$d 天后重置</string>
+    <string name="codex_reset_after_clock">%1$02d:%2$02d 后重置</string>
 </resources>

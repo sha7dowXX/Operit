@@ -57,7 +57,7 @@ import kotlinx.coroutines.withContext
 import com.ai.assistance.operit.ui.floating.ui.pet.AvatarEmotionManager
 import com.ai.assistance.operit.api.voice.VoiceService
 import com.ai.assistance.operit.api.voice.VoiceServiceFactory
-import com.ai.assistance.operit.data.preferences.SpeechServicesPreferences
+import com.ai.assistance.operit.data.preferences.SpeechServiceProfilesPreferences
 import com.ai.assistance.operit.data.preferences.ActivePromptManager
 import com.ai.assistance.operit.data.preferences.CharacterCardManager
 import com.ai.assistance.operit.data.model.ActivePrompt
@@ -93,6 +93,7 @@ import com.ai.assistance.operit.services.ChatServiceUiBridge
 import com.ai.assistance.operit.services.EmptyChatServiceUiBridge
 import com.ai.assistance.operit.ui.features.chat.util.MessageImageGenerator
 import com.ai.assistance.operit.ui.features.chat.components.CharacterSelectorTarget
+import com.ai.assistance.operit.ui.features.chat.components.style.input.common.PendingQueueMessageItem
 enum class ChatHistoryDisplayMode {
     BY_CHARACTER_CARD,
     BY_FOLDER,
@@ -134,7 +135,7 @@ class ChatViewModel(private val context: Context) : ViewModel() {
     private var voiceStateCollectionJob: Job? = null
     private var speechPlaybackJob: Job? = null
     private var speechControlsHideJob: Job? = null
-    private val speechServicesPreferences = SpeechServicesPreferences(context)
+    private val speechServiceProfiles = SpeechServiceProfilesPreferences(context)
     private val activePromptManager = ActivePromptManager.getInstance(context)
     private val characterCardManager = CharacterCardManager.getInstance(context)
 
@@ -145,6 +146,10 @@ class ChatViewModel(private val context: Context) : ViewModel() {
     val isSpeechSessionActive: StateFlow<Boolean> = _isSpeechSessionActive.asStateFlow()
     private val _isSpeechPaused = MutableStateFlow(false)
     val isSpeechPaused: StateFlow<Boolean> = _isSpeechPaused.asStateFlow()
+
+    private val pendingMessageQueueStore = PendingMessageQueueStore()
+    internal val pendingMessageQueueStates: StateFlow<Map<String, PendingMessageQueueState>> =
+        pendingMessageQueueStore.states
 
     // 添加自动朗读状态 - Now managed by ApiConfigDelegate
     val isAutoReadEnabled: StateFlow<Boolean> by lazy { apiConfigDelegate.enableAutoRead }
@@ -209,7 +214,7 @@ class ChatViewModel(private val context: Context) : ViewModel() {
 
     // 思考模式状态现在由ApiConfigDelegate管理
     val enableThinkingMode: StateFlow<Boolean> by lazy { apiConfigDelegate.enableThinkingMode }
-    val thinkingQualityLevel: StateFlow<Int> by lazy { apiConfigDelegate.thinkingQualityLevel }
+    val thinkingOptionId: StateFlow<String> by lazy { apiConfigDelegate.thinkingOptionId }
     val enableMemoryAutoUpdate: StateFlow<Boolean> by lazy { apiConfigDelegate.enableMemoryAutoUpdate }
     val enableTools: StateFlow<Boolean> by lazy { apiConfigDelegate.enableTools }
     val toolPromptVisibility: StateFlow<Map<String, Boolean>> by lazy { apiConfigDelegate.toolPromptVisibility }
@@ -292,7 +297,7 @@ class ChatViewModel(private val context: Context) : ViewModel() {
     // UI状态相关
     val errorMessage: StateFlow<String?> by lazy { uiStateDelegate.errorMessage }
     val popupMessage: StateFlow<String?> by lazy { uiStateDelegate.popupMessage }
-    val toastEvent: StateFlow<String?> by lazy { uiStateDelegate.toastEvent }
+    val toastEvent: StateFlow<ChatToastEvent?> by lazy { uiStateDelegate.toastEvent }
     val masterPermissionLevel: StateFlow<PermissionLevel> by lazy {
         uiStateDelegate.masterPermissionLevel
     }
@@ -301,7 +306,7 @@ class ChatViewModel(private val context: Context) : ViewModel() {
     val currentWindowSize: StateFlow<Long> by lazy { tokenStatsDelegate.currentWindowSizeFlow }
     val inputTokenCount: StateFlow<Long> by lazy { tokenStatsDelegate.cumulativeInputTokensFlow }
     val outputTokenCount: StateFlow<Long> by lazy { tokenStatsDelegate.cumulativeOutputTokensFlow }
-    val perRequestTokenCount: StateFlow<Pair<Int, Int>?> by lazy { tokenStatsDelegate.perRequestTokenCountFlow }
+    val perRequestTokenCount: StateFlow<Pair<Long, Long>?> by lazy { tokenStatsDelegate.perRequestTokenCountFlow }
 
 
 
@@ -587,8 +592,8 @@ class ChatViewModel(private val context: Context) : ViewModel() {
         apiConfigDelegate.toggleThinkingMode()
     }
 
-    fun updateThinkingQualityLevel(level: Int) {
-        apiConfigDelegate.updateThinkingQualityLevel(level)
+    fun updateThinkingOptionId(optionId: String) {
+        apiConfigDelegate.updateThinkingOptionId(optionId)
     }
 
     // 切换记忆自动更新的方法现在委托给ApiConfigDelegate
@@ -731,7 +736,9 @@ class ChatViewModel(private val context: Context) : ViewModel() {
 
     fun deleteChatHistory(chatId: String) {
         chatHistoryDelegate.deleteChatHistory(chatId) { deleted ->
-            if (!deleted) {
+            if (deleted) {
+                pendingMessageQueueStore.removeChat(chatId)
+            } else {
                 uiStateDelegate.showToast(context.getString(R.string.chat_locked_cannot_delete))
             }
         }
@@ -1452,15 +1459,54 @@ class ChatViewModel(private val context: Context) : ViewModel() {
 
     fun sendUserMessage(promptFunctionType: PromptFunctionType = PromptFunctionType.CHAT) {
         hideMentionSuggestionPanel()
-        messageCoordinationDelegate.sendUserMessage(promptFunctionType)
+        messageCoordinationDelegate.sendUserMessage(
+            promptFunctionType = promptFunctionType,
+            preferActiveRoleCard = true,
+        )
     }
 
     fun sendTextMessage(text: String, promptFunctionType: PromptFunctionType = PromptFunctionType.CHAT) {
         hideMentionSuggestionPanel()
         messageCoordinationDelegate.sendUserMessage(
             promptFunctionType = promptFunctionType,
+            preferActiveRoleCard = true,
             messageTextOverride = text
         )
+    }
+
+    fun sendTextMessage(
+        text: String,
+        chatId: String,
+        promptFunctionType: PromptFunctionType = PromptFunctionType.CHAT,
+    ) {
+        hideMentionSuggestionPanel()
+        messageCoordinationDelegate.sendUserMessage(
+            promptFunctionType = promptFunctionType,
+            chatIdOverride = chatId,
+            messageTextOverride = text,
+        )
+    }
+
+    fun enqueuePendingQueueMessage(chatId: String, text: String, isQueueBlocked: Boolean) {
+        pendingMessageQueueStore.enqueue(chatId, text, isQueueBlocked)
+    }
+
+    fun removePendingQueueMessage(chatId: String, messageId: Long): PendingQueueMessageItem? =
+        pendingMessageQueueStore.remove(chatId, messageId)
+
+    fun restorePendingQueueMessage(chatId: String, message: PendingQueueMessageItem) {
+        pendingMessageQueueStore.restore(chatId, message)
+    }
+
+    fun setPendingQueueExpanded(chatId: String, expanded: Boolean) {
+        pendingMessageQueueStore.setExpanded(chatId, expanded)
+    }
+
+    fun consumePendingQueueAutoDequeueSignal(chatId: String, isQueueBlocked: Boolean): Boolean =
+        pendingMessageQueueStore.consumeAutoDequeueSignal(chatId, isQueueBlocked)
+
+    fun suppressNextPendingQueueAutoDequeue(chatId: String) {
+        pendingMessageQueueStore.suppressNextAutoDequeue(chatId)
     }
 
     suspend fun removeLastVisibleUserMessageFromCurrentChat(text: String): Boolean {
@@ -1594,14 +1640,17 @@ class ChatViewModel(private val context: Context) : ViewModel() {
     }
 
     fun cancelCurrentMessage() {
-        // 先取消总结（如果正在进行）
-        if (::messageCoordinationDelegate.isInitialized) {
-            messageCoordinationDelegate.cancelSummary()
-        }
         val chatId = chatHistoryDelegate.currentChatId.value
         if (chatId != null) {
-            messageProcessingDelegate.cancelMessage(chatId)
+            cancelMessage(chatId)
         }
+    }
+
+    fun cancelMessage(chatId: String) {
+        if (::messageCoordinationDelegate.isInitialized) {
+            messageCoordinationDelegate.cancelSummaryForChat(chatId)
+        }
+        messageProcessingDelegate.cancelMessage(chatId)
     }
 
     // UI状态相关方法
@@ -1618,7 +1667,7 @@ class ChatViewModel(private val context: Context) : ViewModel() {
     fun popupMessage(message: String) = uiStateDelegate.showPopupMessage(message)
     fun clearPopupMessage() = uiStateDelegate.clearPopupMessage()
     fun showToast(message: String) = uiStateDelegate.showToast(message)
-    fun clearToastEvent() = uiStateDelegate.clearToastEvent()
+    fun clearToastEvent(eventId: Long) = uiStateDelegate.clearToastEvent(eventId)
 
     // 悬浮窗相关方法
     fun onFloatingButtonClick(
@@ -1703,6 +1752,22 @@ class ChatViewModel(private val context: Context) : ViewModel() {
                     messageProcessingDelegate.setInputProcessingStateForChat(currentChatId, InputProcessingState.Idle)
                 }
             }
+        }
+    }
+
+    suspend fun attachPastedText(text: String): Boolean {
+        val currentChatId = chatHistoryDelegate.currentChatId.value ?: return false
+        messageProcessingDelegate.setInputProcessingStateForChat(
+            currentChatId,
+            InputProcessingState.Processing(context.getString(R.string.chat_processing_attachment))
+        )
+        return try {
+            attachmentDelegate.attachPastedText(text)
+        } finally {
+            messageProcessingDelegate.setInputProcessingStateForChat(
+                currentChatId,
+                InputProcessingState.Idle
+            )
         }
     }
 
@@ -2829,16 +2894,11 @@ class ChatViewModel(private val context: Context) : ViewModel() {
 
     /** 初始化语音服务 */
     private fun initializeVoiceService() {
-        // 监听TTS服务类型和配置的变化
+        // 监听当前 TTS 档案的变化
         viewModelScope.launch {
-            combine(
-                speechServicesPreferences.ttsServiceTypeFlow,
-                speechServicesPreferences.ttsHttpConfigFlow
-            ) { type, config ->
-                type to config
-            }.collect { (type, _) ->
+            speechServiceProfiles.currentTtsProfileFlow.collect { profile ->
                 try {
-                    AppLogger.d(TAG, "TTS配置变化，重新初始化语音服务: type=$type")
+                    AppLogger.d(TAG, "TTS档案变化，重新初始化语音服务: profile=${profile.id} type=${profile.serviceType}")
 
                     val initialized = recreateVoiceService()
                     if (!initialized) {
@@ -2963,7 +3023,7 @@ class ChatViewModel(private val context: Context) : ViewModel() {
                     return@launch
                 }
 
-                val cleanerRegexs = speechServicesPreferences.ttsCleanerRegexsFlow.first()
+                val cleanerRegexs = speechServiceProfiles.getCurrentTtsProfile().cleanerRegexs
                 val cleanedText = TtsCleaner.clean(message, cleanerRegexs)
                 val cleanMessage = WaifuMessageProcessor.cleanContentForWaifu(cleanedText)
                 AppLogger.d(

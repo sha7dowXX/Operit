@@ -12,6 +12,8 @@ import com.ai.assistance.operit.core.chat.messageTimingNow
 import com.ai.assistance.operit.core.tools.AIToolHandler
 import com.ai.assistance.operit.core.tools.packTool.PackageManager
 import com.ai.assistance.operit.core.tools.packTool.TOOLPKG_EVENT_MESSAGE_PROCESSING
+import com.ai.assistance.operit.core.tools.packTool.ToolPkgApiCompatibility
+import com.ai.assistance.operit.core.tools.packTool.ToolPkgApiVersion
 import com.ai.assistance.operit.ui.main.navigation.AppRouteDiscoveryGateway
 import com.ai.assistance.operit.ui.main.navigation.AppRouterGateway
 import com.ai.assistance.operit.ui.main.navigation.RouteEntrySource
@@ -72,6 +74,8 @@ class JsEngine(private val context: Context) {
     private val quickJsDispatcher = quickJsExecutor.asCoroutineDispatcher()
     private val engineScope = CoroutineScope(SupervisorJob() + quickJsDispatcher)
     private val quickJsInitLock = Any()
+    // A disposed Compose host can otherwise close QuickJS between setup and task dispatch.
+    private val executionStartLock = Any()
     private val destroyed = AtomicBoolean(false)
 
     @Volatile
@@ -84,8 +88,15 @@ class JsEngine(private val context: Context) {
         val dispatchIntermediateOnMain: Boolean,
         val envOverrides: Map<String, String>,
         val packageChatId: String?,
+        val toolPkgApiVersion: ToolPkgApiVersion?,
         val toolPkgLogSnapshot: JsToolPkgExecutionContext.LogSnapshot,
         val executionListener: JsExecutionListener?
+    )
+
+    private data class ExecutionDispatch(
+        val session: ExecutionSession,
+        val timeoutSec: Long?,
+        val timeoutMillis: Long?
     )
 
     private data class PendingJsBridgeCallback(
@@ -184,6 +195,15 @@ class JsEngine(private val context: Context) {
         }
     }
 
+    private fun interruptQuickJs(reason: String) {
+        val engine = quickJs ?: return
+        try {
+            engine.interrupt()
+        } catch (e: Exception) {
+            AppLogger.e(TAG, "Error interrupting QuickJS: $reason, ${e.message}", e)
+        }
+    }
+
     private fun disposeQuickJsForReinit(reason: String) {
         synchronized(quickJsInitLock) {
             val engine = quickJs
@@ -191,6 +211,9 @@ class JsEngine(private val context: Context) {
                 jsEnvironmentInitialized = false
                 return
             }
+            // Closing is queued behind current QuickJS work, so a synchronous loop must be
+            // interrupted first or reinitialization can wait forever.
+            interruptQuickJs("reinitialize: $reason")
             try {
                 runOnQuickJsThreadBlocking {
                     engine.close()
@@ -288,6 +311,7 @@ class JsEngine(private val context: Context) {
         envOverrides: Map<String, String>,
         onIntermediateResult: ((Any?) -> Unit)?,
         dispatchIntermediateOnMain: Boolean,
+        toolPkgApiVersion: ToolPkgApiVersion?,
         executionListener: JsExecutionListener?
     ): ExecutionSession {
         return ExecutionSession(
@@ -301,9 +325,41 @@ class JsEngine(private val context: Context) {
                     ?.toString()
                     ?.trim()
                     ?.ifBlank { null },
+            toolPkgApiVersion = toolPkgApiVersion,
             toolPkgLogSnapshot = toolPkgExecutionContext.capture(script, functionName, params),
             executionListener = executionListener
         )
+    }
+
+    private fun resolveToolPkgApiVersionForExecution(
+        params: Map<String, Any?>,
+        explicitApiVersion: String?
+    ): ToolPkgApiVersion? {
+        val explicitVersion = explicitApiVersion?.trim().orEmpty()
+        if (explicitVersion.isNotBlank()) {
+            return ToolPkgApiCompatibility.requireSupported(explicitVersion)
+        }
+
+        val containerPackageName =
+            params["__operit_ui_package_name"]
+                ?.toString()
+                ?.trim()
+                ?.ifBlank { null }
+                ?: return null
+        val declaredVersion =
+            packageManager.getToolPkgContainerDetails(containerPackageName, context)
+                ?.apiVersion
+                ?: return null
+        return ToolPkgApiCompatibility.requireSupported(declaredVersion)
+    }
+
+    private fun buildToolPkgApiContextJson(apiVersion: ToolPkgApiVersion?): Any {
+        return if (apiVersion == null) {
+            JSONObject.NULL
+        } else {
+            JSONObject()
+                .put("apiVersion", apiVersion.toString())
+        }
     }
 
     private fun resolveExecutionSession(callId: String): ExecutionSession? {
@@ -400,13 +456,19 @@ class JsEngine(private val context: Context) {
         }
     }
 
-    private fun cancelAllExecutionSessions(reason: String) {
+    private fun drainExecutionSessions(reason: String): List<ExecutionSession> {
         val sessions = activeExecutionSessions.values.toList()
         activeExecutionSessions.clear()
         sessions.forEach { session ->
             if (!session.future.isDone) {
                 session.future.complete(buildJsExecutionErrorPayload(reason))
             }
+        }
+        return sessions
+    }
+
+    private fun cancelAllExecutionSessions(reason: String) {
+        drainExecutionSessions(reason).forEach { session ->
             cancelExecutionSessionInJs(
                 callId = session.callId,
                 reason = reason
@@ -684,6 +746,7 @@ class JsEngine(private val context: Context) {
      * @param functionName 要调用的函数名称
      * @param params 要传递给函数的参数
      * @param timeoutSec 最长等待秒数；null 表示等待实际完成或主动取消
+     * @param timeoutMillis 精确的最长等待毫秒数；指定后优先于 timeoutSec
      * @return 函数执行结果
      */
     internal fun executeScriptFunction(
@@ -694,6 +757,8 @@ class JsEngine(private val context: Context) {
             onIntermediateResult: ((Any?) -> Unit)? = null,
             dispatchIntermediateOnMain: Boolean = true,
             timeoutSec: Long? = JsTimeoutConfig.MAIN_TIMEOUT_SECONDS.toLong(),
+            timeoutMillis: Long? = null,
+            toolPkgApiVersion: String? = null,
             executionListener: JsExecutionListener? = null
     ): Any? {
         val effectiveParams = params.toMutableMap()
@@ -714,101 +779,133 @@ class JsEngine(private val context: Context) {
         val totalStartTime = if (shouldLogTiming) messageTimingNow() else 0L
 
         val initQuickJsStartTime = if (shouldLogTiming) messageTimingNow() else 0L
-        ensureQuickJs()
-        if (shouldLogTiming) {
-            logMessageTiming(
-                stage = "toolpkg.jsEngine.initQuickJs",
-                startTimeMs = initQuickJsStartTime,
-                details = "function=$functionName, plugin=$timingPluginId"
-            )
-        }
-
-        if (!jsEnvironmentInitialized) {
-            val initJavaScriptEnvironmentStartTime = if (shouldLogTiming) messageTimingNow() else 0L
-            initJavaScriptEnvironment()
+        val dispatch = synchronized(executionStartLock) {
+            if (destroyed.get()) {
+                return buildJsExecutionErrorPayload("JsEngine already destroyed")
+            }
+            ensureQuickJs()
             if (shouldLogTiming) {
                 logMessageTiming(
-                    stage = "toolpkg.jsEngine.initJavaScriptEnvironment",
-                    startTimeMs = initJavaScriptEnvironmentStartTime,
+                    stage = "toolpkg.jsEngine.initQuickJs",
+                    startTimeMs = initQuickJsStartTime,
                     details = "function=$functionName, plugin=$timingPluginId"
                 )
             }
+
             if (!jsEnvironmentInitialized) {
-                val failureReason = "QuickJS runtime initialization failed"
+                val initJavaScriptEnvironmentStartTime = if (shouldLogTiming) messageTimingNow() else 0L
+                initJavaScriptEnvironment()
                 if (shouldLogTiming) {
                     logMessageTiming(
-                        stage = "toolpkg.jsEngine.total",
-                        startTimeMs = totalStartTime,
-                        details = "function=$functionName, plugin=$timingPluginId, success=false, reason=$failureReason"
+                        stage = "toolpkg.jsEngine.initJavaScriptEnvironment",
+                        startTimeMs = initJavaScriptEnvironmentStartTime,
+                        details = "function=$functionName, plugin=$timingPluginId"
                     )
                 }
-                return buildJsExecutionErrorPayload(failureReason)
-            }
-        }
-
-        val callId = nextExecutionCallId()
-        val session =
-            createExecutionSession(
-                callId = callId,
-                script = script,
-                functionName = functionName,
-                params = effectiveParams,
-                envOverrides = envOverrides,
-                onIntermediateResult = onIntermediateResult,
-                dispatchIntermediateOnMain = dispatchIntermediateOnMain,
-                executionListener = executionListener
-            )
-        activeExecutionSessions[callId] = session
-
-        val buildExecutionScriptStartTime = if (shouldLogTiming) messageTimingNow() else 0L
-        val paramsObject = JSONObject(effectiveParams)
-        val paramsJson = paramsObject.toString()
-        val safeTimeoutSec = timeoutSec?.let { if (it <= 0L) 1L else it }
-        val preTimeoutMs =
-            if (safeTimeoutSec == null) {
-                null
-            } else {
-                JsTimeoutConfig.PRE_TIMEOUT_SECONDS * 1000L
-            }
-        val executionArgsJson =
-            JSONArray()
-                .put(callId)
-                .put(paramsObject)
-                .put(script)
-                .put(functionName)
-                .put(safeTimeoutSec ?: JSONObject.NULL)
-                .put(preTimeoutMs ?: JSONObject.NULL)
-                .toString()
-        if (shouldLogTiming) {
-            logMessageTiming(
-                stage = "toolpkg.jsEngine.buildExecutionScript",
-                startTimeMs = buildExecutionScriptStartTime,
-                details = "function=$functionName, plugin=$timingPluginId, scriptLength=${script.length}, paramsLength=${paramsJson.length}, argsLength=${executionArgsJson.length}, directInvoke=true"
-            )
-        }
-
-        launchQuickJsFunctionCall(
-            functionName = TOOLPKG_EXECUTION_ENTRY_FUNCTION,
-            argsJson = executionArgsJson,
-            callSite = "quickjs/runtime/execute-script.call",
-            onError = { e ->
-                AppLogger.e(
-                    TAG,
-                    "Failed to dispatch script execution: callId=$callId, function=$functionName, reason=${e.message}",
-                    e
-                )
-                removeExecutionSession(callId)
-                session.executionListener?.onFailed(callId, e.message ?: "dispatch failed")
-                if (!session.future.isDone) {
-                    session.future.complete(buildJsExecutionErrorPayload(e.message ?: "dispatch failed"))
+                if (!jsEnvironmentInitialized) {
+                    val failureReason = "QuickJS runtime initialization failed"
+                    if (shouldLogTiming) {
+                        logMessageTiming(
+                            stage = "toolpkg.jsEngine.total",
+                            startTimeMs = totalStartTime,
+                            details = "function=$functionName, plugin=$timingPluginId, success=false, reason=$failureReason"
+                        )
+                    }
+                    return buildJsExecutionErrorPayload(failureReason)
                 }
             }
-        )
+
+            val executionToolPkgApiVersion =
+                resolveToolPkgApiVersionForExecution(
+                    params = effectiveParams,
+                    explicitApiVersion = toolPkgApiVersion
+                )
+            val callId = nextExecutionCallId()
+            val session =
+                createExecutionSession(
+                    callId = callId,
+                    script = script,
+                    functionName = functionName,
+                    params = effectiveParams,
+                    envOverrides = envOverrides,
+                    onIntermediateResult = onIntermediateResult,
+                    dispatchIntermediateOnMain = dispatchIntermediateOnMain,
+                    toolPkgApiVersion = executionToolPkgApiVersion,
+                    executionListener = executionListener
+                )
+            activeExecutionSessions[callId] = session
+
+            val buildExecutionScriptStartTime = if (shouldLogTiming) messageTimingNow() else 0L
+            val paramsObject = JSONObject(effectiveParams)
+            val paramsJson = paramsObject.toString()
+            val safeTimeoutMillis = timeoutMillis?.let { if (it <= 0L) 1L else it }
+            val safeTimeoutSec =
+                safeTimeoutMillis?.let { milliseconds ->
+                    (milliseconds + 999L) / 1000L
+                } ?: timeoutSec?.let { if (it <= 0L) 1L else it }
+            val preTimeoutMs =
+                if (safeTimeoutMillis != null) {
+                    (safeTimeoutMillis - JsTimeoutConfig.PRE_TIMEOUT_LEAD_SECONDS * 1000L)
+                        .coerceAtLeast(1_000L)
+                } else if (safeTimeoutSec == null) {
+                    null
+                } else {
+                    (safeTimeoutSec - JsTimeoutConfig.PRE_TIMEOUT_LEAD_SECONDS)
+                        .coerceAtLeast(1L) * 1000L
+                }
+            val executionArgsJson =
+                JSONArray()
+                    .put(callId)
+                    .put(paramsObject)
+                    .put(script)
+                    .put(functionName)
+                    .put(safeTimeoutSec ?: JSONObject.NULL)
+                    .put(preTimeoutMs ?: JSONObject.NULL)
+                    .put(buildToolPkgApiContextJson(session.toolPkgApiVersion))
+                    .toString()
+            if (shouldLogTiming) {
+                logMessageTiming(
+                    stage = "toolpkg.jsEngine.buildExecutionScript",
+                    startTimeMs = buildExecutionScriptStartTime,
+                    details = "function=$functionName, plugin=$timingPluginId, scriptLength=${script.length}, paramsLength=${paramsJson.length}, argsLength=${executionArgsJson.length}, directInvoke=true"
+                )
+            }
+
+            launchQuickJsFunctionCall(
+                functionName = TOOLPKG_EXECUTION_ENTRY_FUNCTION,
+                argsJson = executionArgsJson,
+                callSite = "quickjs/runtime/execute-script.call",
+                onError = { e ->
+                    AppLogger.e(
+                        TAG,
+                        "Failed to dispatch script execution: callId=$callId, function=$functionName, reason=${e.message}",
+                        e
+                    )
+                    removeExecutionSession(callId)
+                    session.executionListener?.onFailed(callId, e.message ?: "dispatch failed")
+                    if (!session.future.isDone) {
+                        session.future.complete(buildJsExecutionErrorPayload(e.message ?: "dispatch failed"))
+                    }
+                }
+            )
+            ExecutionDispatch(
+                session = session,
+                timeoutSec = safeTimeoutSec,
+                timeoutMillis = safeTimeoutMillis
+            )
+        }
+
+        val session = dispatch.session
+        val safeTimeoutSec = dispatch.timeoutSec
+        val safeTimeoutMillis = dispatch.timeoutMillis
+        val callId = session.callId
 
         val waitResultStartTime = if (shouldLogTiming) messageTimingNow() else 0L
         return try {
             val result =
-                if (safeTimeoutSec == null) {
+                if (safeTimeoutMillis != null) {
+                    session.future.get(safeTimeoutMillis, TimeUnit.MILLISECONDS)
+                } else if (safeTimeoutSec == null) {
                     session.future.get()
                 } else {
                     session.future.get(safeTimeoutSec, TimeUnit.SECONDS)
@@ -828,13 +925,25 @@ class JsEngine(private val context: Context) {
             }
             result
         } catch (e: Exception) {
+            if (
+                e is java.util.concurrent.TimeoutException ||
+                    e is InterruptedException
+            ) {
+                // JS-side cancellation uses this engine's executor. Native interruption must
+                // happen first because a synchronous loop prevents the queued cancellation.
+                interruptQuickJs("callId=$callId, function=$functionName")
+            }
             if (e is InterruptedException) {
                 Thread.currentThread().interrupt()
             }
             val failureReason =
                 when (e) {
                     is java.util.concurrent.TimeoutException ->
-                        "Script execution timed out after ${safeTimeoutSec ?: 1L} seconds"
+                        if (safeTimeoutMillis != null) {
+                            "Script execution timed out after $safeTimeoutMillis ms"
+                        } else {
+                            "Script execution timed out after ${safeTimeoutSec ?: 1L} seconds"
+                        }
                     else -> e.message ?: e.javaClass.simpleName
                 }
             AppLogger.e(
@@ -933,9 +1042,10 @@ class JsEngine(private val context: Context) {
             .ifBlank { null }
     }
 
-    fun executeToolPkgMainRegistrationFunction(
+    internal fun executeToolPkgMainRegistrationFunction(
         script: String,
         functionName: String,
+        apiVersion: String = ToolPkgApiCompatibility.LEGACY_API_VERSION,
         params: Map<String, Any?> = emptyMap()
     ): ToolPkgMainRegistrationCapture {
         synchronized(toolPkgRegistrationSession) {
@@ -946,6 +1056,7 @@ class JsEngine(private val context: Context) {
                         script = script,
                         functionName = functionName,
                         params = params,
+                        toolPkgApiVersion = apiVersion,
                         timeoutSec = 12L
                     )
                 return toolPkgRegistrationSession.finish(executionResult)
@@ -1204,7 +1315,10 @@ class JsEngine(private val context: Context) {
         }
         val engine =
             if (isMainTarget) {
-                packageManager.getToolPkgExecutionEngine(resolvedTargetContextKey)
+                packageManager.getToolPkgExecutionEngine(
+                    contextKey = resolvedTargetContextKey,
+                    containerPackageName = normalizedTarget
+                )
             } else {
                 packageManager.findToolPkgExecutionEngine(resolvedTargetContextKey)
                     ?: return buildToolPkgIpcFailure(
@@ -1408,6 +1522,12 @@ class JsEngine(private val context: Context) {
             JsJavaBridgeDelegates.unregisterJsInterfaceReleaseInvoker(jsBridgeCallbackInvoker)
         }
 
+        private fun requireToolPkgRegistrationOperationAllowed(operation: String) {
+            check(!toolPkgRegistrationSession.isActive()) {
+                "$operation is not allowed while registerToolPkg() is running"
+            }
+        }
+
         @JavascriptInterface
         fun decompress(data: String, algorithm: String): String {
             return JsNativeInterfaceDelegates.decompress(
@@ -1500,6 +1620,7 @@ class JsEngine(private val context: Context) {
                 outputFileName: String,
                 internal: String
         ): String {
+            requireToolPkgRegistrationOperationAllowed("ToolPkg.readResource()")
             return JsNativeInterfaceDelegates.readToolPkgResource(
                     context = context,
                     packageManager = packageManager,
@@ -1521,14 +1642,31 @@ class JsEngine(private val context: Context) {
                 resourcePath = resourcePath
             )?.let { resolved -> return resolved }
             if (temporaryResolverActive) {
-                // During toolpkg parsing we must not fall back into PackageManager.
-                // That fallback can wait on initialization and deadlock JavaBridge thread.
+                // During toolpkg parsing, PackageManager access can wait on initialization
+                // and deadlock JavaBridge thread.
                 return ""
             }
             return JsNativeInterfaceDelegates.readToolPkgTextResource(
                     packageManager = packageManager,
                     packageNameOrSubpackageId = packageNameOrSubpackageId,
                     resourcePath = resourcePath
+            )
+        }
+
+        @JavascriptInterface
+        fun callToolPkgWasm(
+            packageNameOrSubpackageId: String,
+            moduleId: String,
+            exportName: String,
+            argsJson: String
+        ): String {
+            requireToolPkgRegistrationOperationAllowed("ToolPkg.wasm.call()")
+            return JsNativeInterfaceDelegates.callToolPkgWasm(
+                packageManager = packageManager,
+                packageNameOrSubpackageId = packageNameOrSubpackageId,
+                moduleId = moduleId,
+                exportName = exportName,
+                argsJson = argsJson
             )
         }
 
@@ -1688,6 +1826,11 @@ class JsEngine(private val context: Context) {
         }
 
         @JavascriptInterface
+        fun captureToolPkgMarketOrigin(specJson: String) {
+            toolPkgRegistrationSession.captureMarketOrigin(specJson)
+        }
+
+        @JavascriptInterface
         fun registerToolPkgToolboxUiModule(specJson: String) {
             toolPkgRegistrationSession.appendToolboxUiModule(specJson)
         }
@@ -1735,6 +1878,21 @@ class JsEngine(private val context: Context) {
         @JavascriptInterface
         fun registerToolPkgChatViewHook(specJson: String) {
             toolPkgRegistrationSession.appendChatViewHook(specJson)
+        }
+
+        @JavascriptInterface
+        fun registerToolPkgChatMessageHook(specJson: String) {
+            toolPkgRegistrationSession.appendChatMessageHook(specJson)
+        }
+
+        @JavascriptInterface
+        fun registerToolPkgChatMessageMenuItem(specJson: String) {
+            toolPkgRegistrationSession.appendChatMessageMenuItem(specJson)
+        }
+
+        @JavascriptInterface
+        fun registerToolPkgChatRuntimeHook(specJson: String) {
+            toolPkgRegistrationSession.appendChatRuntimeHook(specJson)
         }
 
         @JavascriptInterface
@@ -2195,6 +2353,7 @@ class JsEngine(private val context: Context) {
                 toolType = toolType,
                 toolName = toolName,
                 paramsJson = paramsJson,
+                toolPkgApiVersion = null,
                 binaryDataRegistry = binaryDataRegistry,
                 binaryHandlePrefix = BINARY_HANDLE_PREFIX,
                 binaryDataThreshold = BINARY_DATA_THRESHOLD
@@ -2215,6 +2374,32 @@ class JsEngine(private val context: Context) {
                 toolType = toolType,
                 toolName = toolName,
                 paramsJson = paramsJson,
+                toolPkgApiVersion = null,
+                binaryDataRegistry = binaryDataRegistry,
+                binaryHandlePrefix = BINARY_HANDLE_PREFIX,
+                binaryDataThreshold = BINARY_DATA_THRESHOLD,
+                sendToolResult = { callback, result, isError ->
+                    sendToolResult(callback, result, isError)
+                }
+            )
+        }
+
+        @JavascriptInterface
+        fun callToolAsyncForCall(
+                callbackId: String,
+                callId: String,
+                toolType: String,
+                toolName: String,
+                paramsJson: String
+        ) {
+            val toolPkgApiVersion = resolveExecutionSession(callId)?.toolPkgApiVersion
+            JsNativeInterfaceDelegates.callToolAsync(
+                toolHandler = toolHandler,
+                callbackId = callbackId,
+                toolType = toolType,
+                toolName = toolName,
+                paramsJson = paramsJson,
+                toolPkgApiVersion = toolPkgApiVersion,
                 binaryDataRegistry = binaryDataRegistry,
                 binaryHandlePrefix = BINARY_HANDLE_PREFIX,
                 binaryDataThreshold = BINARY_DATA_THRESHOLD,
@@ -2239,6 +2424,37 @@ class JsEngine(private val context: Context) {
                 toolType = toolType,
                 toolName = toolName,
                 paramsJson = paramsJson,
+                toolPkgApiVersion = null,
+                binaryDataRegistry = binaryDataRegistry,
+                binaryHandlePrefix = BINARY_HANDLE_PREFIX,
+                binaryDataThreshold = BINARY_DATA_THRESHOLD,
+                sendToolResult = { callback, result, isError ->
+                    sendToolResult(callback, result, isError)
+                },
+                sendIntermediateResult = { callback, result, isError ->
+                    sendToolResult(callback, result, isError)
+                }
+            )
+        }
+
+        @JavascriptInterface
+        fun callToolAsyncStreamingForCall(
+                callbackId: String,
+                intermediateCallbackId: String,
+                callId: String,
+                toolType: String,
+                toolName: String,
+                paramsJson: String
+        ) {
+            val toolPkgApiVersion = resolveExecutionSession(callId)?.toolPkgApiVersion
+            JsNativeInterfaceDelegates.callToolAsyncStreaming(
+                toolHandler = toolHandler,
+                callbackId = callbackId,
+                intermediateCallbackId = intermediateCallbackId,
+                toolType = toolType,
+                toolName = toolName,
+                paramsJson = paramsJson,
+                toolPkgApiVersion = toolPkgApiVersion,
                 binaryDataRegistry = binaryDataRegistry,
                 binaryHandlePrefix = BINARY_HANDLE_PREFIX,
                 binaryDataThreshold = BINARY_DATA_THRESHOLD,
@@ -2457,12 +2673,32 @@ class JsEngine(private val context: Context) {
 
     /** 销毁引擎资源 */
     fun destroy() {
-        if (!destroyed.compareAndSet(false, true)) {
-            return
+        val engine =
+            synchronized(executionStartLock) {
+                if (!destroyed.compareAndSet(false, true)) {
+                    return
+                }
+                synchronized(quickJsInitLock) {
+                    quickJs.also {
+                        quickJs = null
+                        jsEnvironmentInitialized = false
+                    }
+                }
+            }
+
+        // The close task uses the same executor as script calls. Interrupt native execution
+        // before waiting for that executor so synchronous package code cannot pin its threads.
+        if (engine != null) {
+            try {
+                engine.interrupt()
+            } catch (e: Exception) {
+                AppLogger.e(TAG, "Error interrupting QuickJS during destruction: ${e.message}", e)
+            }
         }
+
         try {
             // 确保任何挂起的回调被完成
-            cancelAllExecutionSessions("Engine destroyed")
+            drainExecutionSessions("Engine destroyed")
             clearPendingJsBridgeCallbacks("java bridge callback canceled: Engine destroyed")
             toolCallInterface.detachJavaBridgeLifecycle()
 
@@ -2474,8 +2710,10 @@ class JsEngine(private val context: Context) {
             binaryDataRegistry.clear()
             javaObjectRegistry.clear()
 
+        } catch (e: Exception) {
+            AppLogger.e(TAG, "Error during JsEngine destruction: ${e.message}", e)
+        } finally {
             try {
-                val engine = quickJs
                 if (engine != null) {
                     runOnQuickJsThreadBlocking(allowWhenDestroyed = true) {
                         engine.close()
@@ -2483,14 +2721,20 @@ class JsEngine(private val context: Context) {
                 }
             } catch (e: Exception) {
                 AppLogger.e(TAG, "Error closing QuickJS: ${e.message}", e)
+            } finally {
+                quickJsThread = null
+                try {
+                    quickJsDispatcher.close()
+                } catch (e: Exception) {
+                    AppLogger.e(TAG, "Error closing QuickJS dispatcher: ${e.message}", e)
+                } finally {
+                    try {
+                        quickJsExecutor.shutdownNow()
+                    } catch (e: Exception) {
+                        AppLogger.e(TAG, "Error shutting down QuickJS executor: ${e.message}", e)
+                    }
+                }
             }
-            quickJs = null
-            quickJsThread = null
-            jsEnvironmentInitialized = false
-            quickJsDispatcher.close()
-            quickJsExecutor.shutdownNow()
-        } catch (e: Exception) {
-            AppLogger.e(TAG, "Error during JsEngine destruction: ${e.message}", e)
         }
     }
 
